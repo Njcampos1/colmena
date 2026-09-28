@@ -1,277 +1,301 @@
-/* La colmena que se apaga — BORRADOR
- * Overview: panal del tiempo · Zoom/filtro: mapa hexagonal de estados
- * Detalle: amenazas por trimestre + fichas · Cierre: abejas silvestres
+/* La colmena que se apaga — V2 (versión concisa)
+ * 100 colmenas. Cada trimestre muere el % que reportó el USDA.
+ * Sin reposición: se apagan hasta quedar ~3.  Real: los apicultores las reponen.
  */
 (function () {
   const D = window.DATA;
-  const P = D.periods;
-  const YEARS = [...new Set(P.map(p => p.year))];
-  const tip = document.getElementById('tip');
-  const state = { abbr: 'US', t: P.length - 1, playing: false };
-
-  const LOSS_STOPS = ['#fbefcc', '#f6d47f', '#eeb13f', '#d98a1c', '#b3620f', '#833f0b', '#57240a'];
-  const LOSS_MAX = 30;
-  const lossColor = d3.scaleSequential(d3.interpolateRgbBasis(LOSS_STOPS)).domain([0, LOSS_MAX]).clamp(true);
-  const STRESS_STOPS = ['#e3eefc', '#b7d3f6', '#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281'];
-  const STRESS_MAX = 60;
-  const stressColor = d3.scaleSequential(d3.interpolateRgbBasis(STRESS_STOPS)).domain([0, STRESS_MAX]).clamp(true);
-  const inkOn = c => (d3.hcl(c).l > 60 ? '#1d1a14' : '#ffffff');
-
-  const fmtInt = d3.format(',.0f');
-  const fmtK = v => v == null ? '—' : v >= 1e6 ? d3.format('.2f')(v / 1e6).replace('.', ',') + ' M' : fmtInt(v).replace(/,/g, '.');
-  const fmtPct = v => v == null ? '—' : d3.format('.1f')(v).replace('.', ',') + ' %';
-  const rec = (abbr, t) => (D.series[abbr] || [])[t];
+  const Q = D.periods;                         // 26 trimestres
+  const N = Q.length;                          // puntos 0..26 = inicio de cada trimestre (+ final)
+  const MES = ['ene', 'abr', 'jul', 'oct'];
+  const pointLabel = t => t < N ? `${MES[Q[t].q - 1]} ${Q[t].year}` : 'jul 2021';
+  const qLabel = q => Q[q].label;
+  const fmt1 = v => d3.format('.1f')(v).replace('.', ',');
   const stressLabel = Object.fromEntries(D.stressors.map(s => [s.key, s.label]));
+  const $ = id => document.getElementById(id);
+  const tip = $('tip');
 
-  const SHORT = { varroa: 'Varroa', plagas: 'Plagas', enfermedades: 'Enfermed.', pesticidas: 'Pesticidas', otros: 'Otros', desconocido: 'Descon.' };
-  const STRESS_ORDER = D.stressors.map(s => s.key).sort((a, b) =>
-    d3.mean(D.series.US, r => r.s?.[b]) - d3.mean(D.series.US, r => r.s?.[a]));
+  const S = { abbr: 'US', t: 0, mode: 'sin', revealed: false, playing: false, series: null };
 
-  function hexPath(r) {
-    const pts = d3.range(6).map(i => {
-      const a = (Math.PI / 180) * (60 * i - 30);
-      return [r * Math.cos(a), r * Math.sin(a)];
-    });
-    return 'M' + pts.map(p => p.join(',')).join('L') + 'Z';
+  // ---------- modelo ----------
+  function build(abbr) {
+    const rows = D.series[abbr];
+    const sin = [100];
+    rows.forEach((r, t) => sin.push(sin[t] * (1 - (r.missing || r.pct == null ? 0 : r.pct) / 100)));
+    const n0 = rows.find(r => r.n)?.n;
+    let real = rows.map(r => (r.n ? (r.n / n0) * 100 : null));
+    real = real.map((v, i) => v ?? (((real[i - 1] ?? real[i + 1]) + (real[i + 1] ?? real[i - 1])) / 2));
+    real.push(real[N - 1]);                       // el último punto repite el último conteo publicado
+    const valid = rows.filter(r => !r.missing && r.pct != null);
+    return { rows, sin, real, meanPct: d3.mean(valid, r => r.pct) };
   }
-  function addHatch(svg, id) {
-    const p = svg.append('defs').append('pattern').attr('id', id).attr('patternUnits', 'userSpaceOnUse')
-      .attr('width', 6).attr('height', 6).attr('patternTransform', 'rotate(45)');
-    p.append('rect').attr('width', 6).attr('height', 6).attr('fill', 'var(--missing)');
-    p.append('line').attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 6).attr('stroke', 'var(--hatch)').attr('stroke-width', 2);
+
+  // orden (reproducible) en que mueren las celdas
+  const CELLS = 100;
+  const rank = d3.shuffler(d3.randomLcg(0.42))(d3.range(CELLS));
+
+  function cellState(i, t, mode) {
+    const r = rank[i];
+    const A = Math.round(S.series.sin[t]);
+    if (mode === 'sin') return r < A ? 'viva' : 'muerta';
+    const R = Math.min(CELLS, Math.round(S.series.real[t]));
+    if (R <= A) return r < R ? 'viva' : 'muerta';
+    if (r < A) return 'viva';
+    return r >= CELLS - (R - A) ? 'repuesta' : 'muerta';
   }
-  function showTip(ev, html) {
-    tip.innerHTML = html; tip.hidden = false;
-    const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
-    let x = ev.clientX + pad, y = ev.clientY + pad;
-    if (x + w > innerWidth - 8) x = ev.clientX - w - pad;
-    if (y + h > innerHeight - 8) y = ev.clientY - h - pad;
-    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  function deathQuarter(i) {
+    const r = rank[i], s = S.series.sin;
+    for (let q = 0; q < N; q++) if (Math.round(s[q]) > r && Math.round(s[q + 1]) <= r) return q;
+    return null;
   }
-  const hideTip = () => { tip.hidden = true; };
-  function topStressor(r) {
+  const aliveAt = (t, mode) => mode === 'sin' ? S.series.sin[t] : S.series.real[t];
+
+  function topStress(r) {
     if (!r?.s) return null;
     const k = d3.greatest(Object.keys(r.s), k => r.s[k] ?? -1);
-    return r.s[k] == null ? null : { key: k, v: r.s[k] };
-  }
-  function tipHtml(abbr, t) {
-    const r = rec(abbr, t), p = P[t];
-    if (!r || r.missing) return `<b>${D.names[abbr]} · ${p.label}</b><br>Sin dato (el USDA no publicó este trimestre).`;
-    const ts = topStressor(r);
-    return `<b>${D.names[abbr]} · ${p.label}</b><br>
-      Colonias perdidas: <b>${fmtPct(r.pct)}</b> (${fmtK(r.lost)})<br>
-      Colonias añadidas: ${fmtK(r.added)}<br>
-      ${ts ? `Mayor amenaza: ${stressLabel[ts.key]} (${fmtPct(ts.v)})` : ''}`;
+    return r.s[k] == null ? null : { k, v: r.s[k] };
   }
 
-  function soundFor(abbr, t) {
-    if (!Sonido.on || Sonido._coda) return;
-    const r = rec(abbr, t);
-    Sonido.update(r && !r.missing ? { pct: r.pct, varroa: r.s?.varroa, pesticidas: r.s?.pesticidas } : { missing: true });
+  // ---------- tooltip ----------
+  function showTip(ev, html) {
+    tip.innerHTML = html; tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = ev.clientX + 14, y = ev.clientY + 14;
+    if (x + w > innerWidth - 8) x = ev.clientX - w - 14;
+    if (y + h > innerHeight - 8) y = ev.clientY - h - 14;
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  }
+  const hideTip = () => (tip.hidden = true);
+  function quarterHtml(q) {
+    const r = S.series.rows[q];
+    if (r.missing || r.pct == null) return `<b>${qLabel(q)}</b><br>Sin dato: el USDA no hizo la encuesta.`;
+    const ts = topStress(r);
+    return `<b>${qLabel(q)}</b><br>Murió el <b>${fmt1(r.pct)} %</b> de las colonias` +
+      (ts ? `<br>Mayor amenaza: ${stressLabel[ts.k].split(' (')[0]} (${fmt1(ts.v)} % afectadas)` : '');
   }
 
-  // 1) PANAL DEL TIEMPO
+  // ======================================================
+  // PANAL: 100 celdas
+  // ======================================================
+  let hexSel;
   function drawPanal() {
-    const el = document.getElementById('panal');
-    const W = el.clientWidth || 520;
-    const left = 62, top = 26;
-    const r = Math.min(34, (W - left - 8) / ((YEARS.length + 0.5) * Math.sqrt(3)));
-    const hw = Math.sqrt(3) * r;
-    const H = top + 4 * 1.5 * r + r * 0.6 + 6;
+    const el = $('panal');
+    const cols = 10, rows = 10, r = 24, w = Math.sqrt(3) * r;
+    const W = cols * w + w / 2 + 4, H = rows * 1.5 * r + r / 2 + 4;
+    const hex = d3.range(6).map(k => { const a = Math.PI / 180 * (60 * k - 30); return [(r - 1.5) * Math.cos(a), (r - 1.5) * Math.sin(a)]; });
+    const path = 'M' + hex.join('L') + 'Z';
     el.innerHTML = '';
-    const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`);
-    addHatch(svg, 'hatch-panal');
-    const g = svg.append('g').attr('transform', `translate(${left},${top + r})`);
-    const pos = p => {
-      const row = p.q - 1, col = YEARS.indexOf(p.year);
-      return [col * hw + (row % 2 ? hw / 2 : 0) + hw / 2, row * 1.5 * r];
-    };
-    YEARS.forEach((y, i) => svg.append('text').attr('class', 'axis-t strong').attr('x', left + i * hw + hw * 0.75)
-      .attr('y', 14).attr('text-anchor', 'middle').text(y));
-    ['Ene–Mar', 'Abr–Jun', 'Jul–Sep', 'Oct–Dic'].forEach((l, i) => svg.append('text').attr('class', 'axis-t')
-      .attr('x', left - 8).attr('y', top + r + i * 1.5 * r).attr('text-anchor', 'end').attr('dominant-baseline', 'central').text(l));
-    [[2021, 3], [2021, 4]].forEach(([y, q]) => {
-      const [x, yy] = pos({ year: y, q });
-      g.append('path').attr('d', hexPath(r - 1)).attr('transform', `translate(${x},${yy})`)
-        .attr('fill', 'none').attr('stroke', 'var(--line)').attr('stroke-dasharray', '3 3');
-    });
-    const path = hexPath(r - 1);
-    const cells = g.selectAll('g.c').data(P).join('g').attr('class', 'c')
-      .attr('transform', p => `translate(${pos(p)})`);
-    cells.append('path').attr('d', path)
-      .attr('class', p => 'cell' + (p.t === state.t ? ' sel' : ''))
-      .attr('fill', p => { const d = rec(state.abbr, p.t); return !d || d.missing ? 'url(#hatch-panal)' : lossColor(d.pct); })
-      .attr('tabindex', 0).attr('role', 'button')
-      .attr('aria-label', p => { const d = rec(state.abbr, p.t); return `${p.label}: ${d && !d.missing ? fmtPct(d.pct) + ' perdidas' : 'sin dato'}`; })
-      .on('mouseenter', (ev, p) => { showTip(ev, tipHtml(state.abbr, p.t)); soundFor(state.abbr, p.t); })
-      .on('mousemove', (ev, p) => showTip(ev, tipHtml(state.abbr, p.t)))
-      .on('mouseleave', () => { hideTip(); soundFor(state.abbr, state.t); })
-      .on('click', (ev, p) => select({ t: p.t }))
-      .on('keydown', (ev, p) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select({ t: p.t }); } });
-    const vals = P.map(p => rec(state.abbr, p.t)).filter(d => d && !d.missing);
-    const maxT = vals.length ? d3.greatest(vals, d => d.pct).t : -1;
-    cells.filter(p => p.t === state.t || p.t === maxT).append('text').attr('class', 'hex-lbl')
-      .attr('fill', p => { const d = rec(state.abbr, p.t); return !d || d.missing ? 'var(--ink-2)' : inkOn(lossColor(d.pct)); })
-      .text(p => { const d = rec(state.abbr, p.t); return !d || d.missing ? 's/d' : Math.round(d.pct) + '%'; });
-    document.getElementById('scope-name').textContent = D.names[state.abbr];
-  }
-
-  // 2) MAPA HEXAGONAL DE ESTADOS
-  const GRID = {
-    AK: [0, 0], ME: [0, 11],
-    WI: [1, 6], VT: [1, 10], NH: [1, 11],
-    WA: [2, 1], ID: [2, 2], MT: [2, 3], ND: [2, 4], MN: [2, 5], IL: [2, 6], MI: [2, 7], NY: [2, 9], MA: [2, 10],
-    OR: [3, 1], NV: [3, 2], WY: [3, 3], SD: [3, 4], IA: [3, 5], IN: [3, 6], OH: [3, 7], PA: [3, 8], NJ: [3, 9], CT: [3, 10], RI: [3, 11],
-    CA: [4, 1], UT: [4, 2], CO: [4, 3], NE: [4, 4], MO: [4, 5], KY: [4, 6], WV: [4, 7], VA: [4, 8], MD: [4, 9], DE: [4, 10],
-    AZ: [5, 2], NM: [5, 3], KS: [5, 4], AR: [5, 5], TN: [5, 6], NC: [5, 7], SC: [5, 8],
-    OK: [6, 4], LA: [6, 5], MS: [6, 6], AL: [6, 7], GA: [6, 8],
-    HI: [7, 0], TX: [7, 4], FL: [7, 9],
-  };
-  function drawMapa() {
-    const el = document.getElementById('mapa');
-    const W = el.clientWidth || 520;
-    const cols = 12.5;
-    const r = Math.min(26, W / (cols * Math.sqrt(3)));
-    const hw = Math.sqrt(3) * r;
-    const H = 8 * 1.5 * r + r;
-    el.innerHTML = '';
-    const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`);
-    addHatch(svg, 'hatch-map');
-    const g = svg.append('g').attr('transform', `translate(${(W - cols * hw) / 2 + hw / 2},${r + 2})`);
-    const data = Object.entries(GRID).map(([abbr, [row, col]]) => ({ abbr, row, col, has: !!D.series[abbr] }));
-    const path = hexPath(r - 1);
-    const cells = g.selectAll('g.s').data(data).join('g').attr('class', 's')
-      .attr('transform', d => `translate(${d.col * hw + (d.row % 2 ? hw / 2 : 0)},${d.row * 1.5 * r})`);
-    const fillOf = d => { const x = d.has && rec(d.abbr, state.t); return !x || x.missing ? 'url(#hatch-map)' : lossColor(x.pct); };
-    cells.append('path').attr('d', path)
-      .attr('class', d => 'cell' + (d.abbr === state.abbr ? ' sel' : ''))
-      .attr('fill', fillOf)
-      .style('cursor', d => d.has ? 'pointer' : 'default')
-      .attr('tabindex', d => d.has ? 0 : null)
-      .attr('aria-label', d => d.abbr)
-      .on('mouseenter mousemove', (ev, d) => {
-        showTip(ev, d.has ? tipHtml(d.abbr, state.t) : `<b>${d.abbr}</b><br>Sin serie propia: el USDA lo incluye en “Otros estados”.`);
-        if (d.has) soundFor(d.abbr, state.t);
+    const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img');
+    hexSel = svg.selectAll('path').data(d3.range(CELLS)).join('path')
+      .attr('d', path)
+      .attr('transform', i => { const row = Math.floor(i / cols), col = i % cols; return `translate(${2 + w / 2 + col * w + (row % 2 ? w / 2 : 0)},${2 + r + row * 1.5 * r})`; })
+      .attr('class', 'hex viva')
+      .style('animation-delay', () => `${-Math.random() * 1.6}s`)
+      .on('mouseenter mousemove', (ev, i) => {
+        const st = cellState(i, S.t, S.mode), dq = deathQuarter(i);
+        let html = `<b>Colmena ${i + 1}</b><br>`;
+        if (st === 'viva') html += 'Sigue viva.';
+        else if (st === 'repuesta') html += `Murió en ${qLabel(dq)}.<br>Un apicultor la reemplazó.`;
+        else html += dq != null ? `Murió en ${qLabel(dq)}.` : 'Muerta.';
+        if (dq != null && st !== 'viva') {
+          const ts = topStress(S.series.rows[dq]);
+          if (ts) html += `<br><span style="opacity:.75">Ese trimestre, la mayor amenaza fue ${stressLabel[ts.k].split(' (')[0].toLowerCase()}.</span>`;
+        }
+        showTip(ev, html);
       })
-      .on('mouseleave', () => { hideTip(); soundFor(state.abbr, state.t); })
-      .on('click', (ev, d) => d.has && select({ abbr: d.abbr === state.abbr ? 'US' : d.abbr }))
-      .on('keydown', (ev, d) => { if (d.has && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); select({ abbr: d.abbr }); } });
-    cells.append('text').attr('class', 'hex-lbl')
-      .attr('fill', d => { const x = d.has && rec(d.abbr, state.t); return !x || x.missing ? 'var(--ink-3)' : inkOn(lossColor(x.pct)); })
-      .style('font-size', Math.max(8, r * 0.42) + 'px')
-      .text(d => d.abbr);
-    document.getElementById('map-period').textContent = P[state.t].label;
+      .on('mouseleave', hideTip);
+  }
+  function paint(animate) {
+    hexSel.attr('class', i => 'hex ' + cellState(i, S.t, S.mode));
   }
 
-  // 3) DETALLE
-  function drawTiles() {
-    const r = rec(state.abbr, state.t);
-    const el = document.getElementById('tiles');
-    document.getElementById('det-title').textContent = `· ${D.names[state.abbr]}, ${P[state.t].label}`;
-    if (!r || r.missing) {
-      el.innerHTML = `<div class="tile wide"><div class="v">Sin dato</div><div class="l">El USDA no publicó este trimestre (T2 2019 fue suspendido).</div></div>`;
-      return;
-    }
-    const ts = topStressor(r);
-    el.innerHTML = `
-      <div class="tile wide hero"><div class="v">${fmtPct(r.pct)}</div><div class="l">de las colonias se perdió este trimestre <span class="muted">(sobre el máximo de colonias que hubo en el trimestre, como calcula el USDA)</span></div></div>
-      <div class="tile"><div class="v">${fmtK(r.n)}</div><div class="l">colonias al inicio</div></div>
-      <div class="tile"><div class="v">${fmtK(r.lost)}</div><div class="l">colonias perdidas</div></div>
-      <div class="tile"><div class="v">${fmtK(r.added)}</div><div class="l">colonias añadidas (repuestas)</div></div>
-      <div class="tile"><div class="v">${ts ? stressLabel[ts.key].split(' ')[0] : '—'}</div><div class="l">mayor amenaza${ts ? ` (${fmtPct(ts.v)})` : ''}</div></div>`;
-  }
-
-  function drawEstres() {
-    const el = document.getElementById('estres');
-    const W = el.clientWidth || 700;
-    const narrow = W < 520;
-    const labW = narrow ? 104 : 170, valW = 56, rowH = 26, top = 4, bottom = 22;
-    const cw = (W - labW - valW) / P.length;
-    const H = top + STRESS_ORDER.length * rowH + bottom;
+  // ======================================================
+  // CURVA: colmenas vivas por trimestre (overview + control)
+  // ======================================================
+  let curve = {};
+  function drawCurva() {
+    const el = $('curva');
+    const W = Math.max(320, el.clientWidth), H = 150;
+    const m = { t: 14, r: 150, b: 22, l: 30 };
+    const x = d3.scaleLinear([0, N], [m.l, W - m.r]);
+    const ymax = Math.max(100, S.revealed ? d3.max(S.series.real) : 0) * 1.05;
+    const y = d3.scaleLinear([0, ymax], [H - m.b, m.t]);
     el.innerHTML = '';
     const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`);
-    addHatch(svg, 'hatch-st');
-    const g = svg.append('g').attr('transform', `translate(${labW},${top})`);
-    const series = D.series[state.abbr];
-    STRESS_ORDER.forEach((k, i) => {
-      const y = i * rowH;
-      svg.append('text').attr('class', 'row-l').attr('x', labW - 8).attr('y', top + y + rowH / 2)
-        .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
-        .text(narrow ? SHORT[k] : stressLabel[k]);
-      g.selectAll(null).data(series).join('rect')
-        .attr('class', 'cell')
-        .attr('x', d => d.t * cw).attr('y', y + 1).attr('width', Math.max(1, cw)).attr('height', rowH - 2).attr('rx', 3)
-        .attr('fill', d => d.s?.[k] == null ? 'url(#hatch-st)' : stressColor(d.s[k]))
-        .on('mouseenter mousemove', (ev, d) => showTip(ev, `<b>${stressLabel[k]}</b> · ${P[d.t].label}<br>${d.s?.[k] == null ? 'Sin dato' : fmtPct(d.s[k]) + ' de las colonias afectadas'}`))
-        .on('mouseleave', hideTip)
-        .on('click', (ev, d) => select({ t: d.t }));
-      const v = series[state.t]?.s?.[k];
-      svg.append('text').attr('class', 'row-v').attr('x', W - 4).attr('y', top + y + rowH / 2)
-        .attr('text-anchor', 'end').attr('dominant-baseline', 'central').text(v == null ? 's/d' : fmtPct(v));
+    [0, 50, 100].forEach(v => {
+      svg.append('line').attr('class', 'grid').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(v)).attr('y2', y(v));
+      svg.append('text').attr('class', 'ax').attr('x', m.l - 6).attr('y', y(v)).attr('dy', '0.32em').attr('text-anchor', 'end').text(v);
     });
-    g.append('rect').attr('class', 'col-sel').attr('x', state.t * cw - 1).attr('y', -1)
-      .attr('width', cw + 2).attr('height', STRESS_ORDER.length * rowH + 2);
-    YEARS.forEach(y => {
-      const t = P.findIndex(p => p.year === y);
-      g.append('text').attr('class', 'axis-t').attr('x', t * cw + 1).attr('y', STRESS_ORDER.length * rowH + 15).text(narrow ? "'" + String(y).slice(2) : y);
+    d3.range(2015, 2022).forEach(yr => {
+      const t = (yr - 2015) * 4;
+      svg.append('text').attr('class', 'ax').attr('x', x(t)).attr('y', H - 6).attr('text-anchor', 'start').text(yr);
     });
-  }
+    // trimestres sin dato
+    S.series.rows.forEach((r, q) => { if (r.missing) svg.append('rect').attr('class', 'gap').attr('x', x(q)).attr('width', x(q + 1) - x(q)).attr('y', m.t).attr('height', H - m.b - m.t); });
 
-  function legend(id, stops, max, label) {
-    const el = document.getElementById(id);
-    el.innerHTML = `<span>${label}</span><span>0 %</span><span class="ramp">${stops.map(c => `<i style="background:${c}"></i>`).join('')}</span><span>${max} %+</span>
-      <span style="margin-left:8px"><span class="swatch hatch"></span>sin dato</span>`;
-  }
-
-  function select(ch) {
-    Object.assign(state, ch);
-    drawPanal(); drawMapa(); drawTiles(); drawEstres();
-    soundFor(state.abbr, state.t);
-  }
-
-  const btnSound = document.getElementById('btn-sound');
-  btnSound.addEventListener('click', async () => {
-    if (Sonido.on) { Sonido.disable(); btnSound.setAttribute('aria-pressed', 'false'); btnSound.querySelector('.lbl').textContent = 'Activar sonido'; }
-    else {
-      await Sonido.enable(); soundFor(state.abbr, state.t);
-      btnSound.setAttribute('aria-pressed', 'true'); btnSound.querySelector('.lbl').textContent = 'Silenciar';
+    const sinPts = S.series.sin.map((v, t) => [x(t), y(v)]);
+    svg.append('path').attr('class', 'a-sin').attr('d', d3.area().x(d => d[0]).y0(y(0)).y1(d => d[1])(sinPts));
+    svg.append('path').attr('class', 'l-sin').attr('d', d3.line()(sinPts));
+    const end = S.series.sin[N];
+    svg.append('text').attr('class', 'lbl sin').attr('x', W - m.r + 8).attr('y', y(end)).attr('dy', '0.32em')
+      .text(`Sin reposición: ${Math.round(end)}`);
+    if (S.revealed) {
+      const realPts = S.series.real.map((v, t) => [x(t), y(v)]);
+      svg.append('path').attr('class', 'l-real').attr('d', d3.line()(realPts));
+      svg.append('text').attr('class', 'lbl real').attr('x', W - m.r + 8).attr('y', y(S.series.real[N])).attr('dy', '0.32em')
+        .text(`Real: ${Math.round(S.series.real[N])}`);
     }
-  });
+    const head = svg.append('g');
+    head.append('line').attr('class', 'head').attr('y1', m.t).attr('y2', H - m.b);
+    head.append('circle').attr('class', 'head-dot').attr('r', 4.5);
 
-  let playTimer = null;
-  const btnPlay = document.getElementById('btn-play');
-  function stopPlay() { clearInterval(playTimer); playTimer = null; state.playing = false; btnPlay.textContent = '▶ Recorrer 2015–2021'; btnPlay.setAttribute('aria-pressed', 'false'); }
-  btnPlay.addEventListener('click', async () => {
-    if (playTimer) return stopPlay();
-    if (!Sonido.on) btnSound.click();
-    state.playing = true; btnPlay.textContent = '❚❚ Pausar'; btnPlay.setAttribute('aria-pressed', 'true');
-    let t = state.t >= P.length - 1 ? 0 : state.t;
-    select({ t });
-    playTimer = setInterval(() => {
-      t++;
-      if (t >= P.length) return stopPlay();
-      select({ t });
-    }, 1300);
-  });
+    // interacción: pasar = detalle del trimestre; clic/arrastrar = mover el tiempo
+    let dragging = false;
+    const toT = ev => Math.max(0, Math.min(N, Math.round(x.invert(d3.pointer(ev)[0]))));
+    svg.append('rect').attr('class', 'hit').attr('x', m.l).attr('y', 0).attr('width', W - m.r - m.l).attr('height', H)
+      .on('pointerdown', ev => { dragging = true; ev.target.setPointerCapture(ev.pointerId); stopPlay(); setT(toT(ev)); })
+      .on('pointermove', ev => {
+        const q = Math.max(0, Math.min(N - 1, Math.floor(x.invert(d3.pointer(ev)[0]))));
+        showTip(ev, quarterHtml(q));
+        if (dragging) setT(toT(ev));
+      })
+      .on('pointerup pointercancel', () => (dragging = false))
+      .on('pointerleave', () => { hideTip(); });
+    curve = { x, y, head };
+    moveHead();
+  }
+  function moveHead() {
+    const { x, y, head } = curve;
+    const v = aliveAt(S.t, S.mode);
+    head.select('line').attr('x1', x(S.t)).attr('x2', x(S.t));
+    head.select('circle').attr('cx', x(S.t)).attr('cy', y(v));
+  }
 
-  document.getElementById('btn-us').addEventListener('click', () => select({ abbr: 'US' }));
+  // ======================================================
+  // estado -> pantalla
+  // ======================================================
+  function render() {
+    const v = aliveAt(S.t, S.mode);
+    $('num').textContent = Math.round(v);
+    $('when').textContent = pointLabel(S.t) + (S.mode === 'real' ? ' · real' : ' · sin reposición');
+    paint();
+    moveHead();
+    Zumbido.setAlive(v);
+  }
+  function setT(t) { S.t = t; render(); if (t === N && S.mode === 'sin') showEnding(); }
 
-  const btnCoda = document.getElementById('btn-coda');
-  const mHive = document.getElementById('m-hive'), mWild = document.getElementById('m-wild');
-  btnCoda.addEventListener('click', async () => {
-    if (Sonido._coda) { Sonido.stopCoda(); return; }
+  function storyText() {
+    const s = S.series, endReal = s.real[N], endSin = Math.round(s.sin[N]);
+    $('l0').innerHTML = `Cada trimestre muere cerca de <b>1 de cada ${Math.round(100 / s.meanPct)}</b> colmenas.<br>¿Qué pasaría si nadie las repusiera?`;
+    $('l1-n').textContent = endSin;
+    let a;
+    if (endReal >= 90 && endReal <= 110) a = 'Pero en 2021 había casi las mismas colmenas que en 2015.';
+    else if (endReal > 110) a = `Pero en 2021 había <b>más</b> colmenas que en 2015 (${Math.round(endReal)} por cada 100).`;
+    else a = `Pero en 2021 seguía habiendo ${Math.round(endReal)} de cada 100, no ${endSin}.`;
+    $('l2').innerHTML = a + ' Los apicultores <b>reemplazan</b> cada colmena que muere.';
+    $('kicker').textContent = `Abejas melíferas · ${D.names[S.abbr]} · 2015–2021`;
+  }
+  function showEnding() { $('l1').hidden = false; $('l2').hidden = false; $('btn-real').hidden = false; }
+
+  // ---------- reproducción ----------
+  const STEP = 1000; // ms por trimestre
+  let timer = null;
+  function stopPlay() { clearTimeout(timer); timer = null; S.playing = false; $('btn-play').textContent = S.t >= N ? '↺ Otra vez' : '▶ Escuchar'; }
+  async function play() {
+    if (S.playing) return stopPlay();
+    await ensureSound();
+    if (S.t >= N) S.t = 0;
+    S.playing = true; $('btn-play').textContent = '❚❚ Pausa';
+    render();
+    const step = () => {
+      if (S.t >= N) { stopPlay(); return; }
+      const t0 = S.t, t1 = t0 + 1;
+      // celdas que cambian en este trimestre: animación + sonido en el mismo instante
+      d3.range(CELLS).forEach(i => {
+        const a = cellState(i, t0, S.mode), b = cellState(i, t1, S.mode);
+        if (a === b) return;
+        const delay = Math.random() * STEP * 0.85;
+        if (b === 'muerta') {
+          Zumbido.death(delay / 1000);
+          setTimeout(() => {
+            const n = hexSel.nodes()[i]; n.setAttribute('class', 'hex muriendo');
+            setTimeout(() => n.setAttribute('class', 'hex ' + b), 180);
+          }, delay);
+        } else {
+          Zumbido.birth(delay / 1000);
+          setTimeout(() => hexSel.nodes()[i].setAttribute('class', 'hex ' + b), delay);
+        }
+      });
+      timer = setTimeout(() => {
+        S.t = t1;
+        $('num').textContent = Math.round(aliveAt(S.t, S.mode));
+        $('when').textContent = pointLabel(S.t) + (S.mode === 'real' ? ' · real' : ' · sin reposición');
+        moveHead(); Zumbido.setAlive(aliveAt(S.t, S.mode), 0.9);
+        if (S.t === N) { paint(); stopPlay(); if (S.mode === 'sin') showEnding(); else $('l3').hidden = false; return; }
+        step();
+      }, STEP);
+    };
+    step();
+  }
+
+  // revelación: los apicultores reponen (a la fecha actual, con zumbidos que suben)
+  async function reveal() {
     stopPlay();
-    if (!Sonido.on) btnSound.click();
-    const us = D.series.US.filter(r => !r.missing);
-    const hive = { pct: d3.mean(us, r => r.pct), varroa: d3.mean(us, r => r.s?.varroa), pesticidas: d3.mean(us, r => r.s?.pesticidas) };
-    btnCoda.textContent = '■ Detener';
-    await Sonido.coda(hive,
-      f => { mHive.style.width = f.hive * 100 + '%'; mWild.style.width = f.wild * 100 + '%'; },
-      () => { btnCoda.textContent = '▶ Escuchar el contraste'; soundFor(state.abbr, state.t); });
+    await ensureSound();
+    if (S.mode === 'real') { // volver a ver sin reposición
+      S.mode = 'sin'; $('btn-real').textContent = 'Ver lo que realmente pasó';
+      document.querySelector('.key .rep').hidden = true;
+      drawCurva(); render(); return;
+    }
+    S.mode = 'real'; S.revealed = true;
+    $('btn-real').textContent = 'Ver sin reposición';
+    document.querySelector('.key .rep').hidden = false;
+    drawCurva();
+    const nodes = hexSel.nodes();
+    const changed = d3.range(CELLS).filter(i => cellState(i, S.t, 'sin') !== cellState(i, S.t, 'real'));
+    d3.shuffle(changed).forEach((i, k) => {
+      const delay = (k / Math.max(1, changed.length)) * 2600;
+      Zumbido.birth(delay / 1000);
+      setTimeout(() => nodes[i].setAttribute('class', 'hex ' + cellState(i, S.t, 'real')), delay);
+    });
+    const from = S.series.sin[S.t], to = S.series.real[S.t];
+    d3.select($('num')).transition().duration(2600).tween('n', function () {
+      const f = d3.interpolateNumber(from, to); return u => (this.textContent = Math.round(f(u)));
+    });
+    $('when').textContent = pointLabel(S.t) + ' · real';
+    moveHead();
+    Zumbido.setAlive(to, 2.6);
+    setTimeout(() => { $('l3').hidden = false; }, 2800);
+  }
+
+  // ---------- sonido ----------
+  async function ensureSound() {
+    if (!Zumbido.on) { await Zumbido.enable(); Zumbido.setAlive(aliveAt(S.t, S.mode)); }
+    $('btn-sound').setAttribute('aria-pressed', 'true'); $('btn-sound').textContent = '🔊';
+  }
+  $('btn-sound').addEventListener('click', async () => {
+    if (Zumbido.on) { Zumbido.disable(); $('btn-sound').setAttribute('aria-pressed', 'false'); $('btn-sound').textContent = '🔈'; }
+    else await ensureSound();
+  });
+  $('btn-play').addEventListener('click', play);
+  $('btn-real').addEventListener('click', reveal);
+  addEventListener('keydown', ev => {
+    if (ev.target.tagName === 'SELECT') return;
+    if (ev.key === 'ArrowRight') { stopPlay(); setT(Math.min(N, S.t + 1)); }
+    if (ev.key === 'ArrowLeft') { stopPlay(); setT(Math.max(0, S.t - 1)); }
   });
 
-  legend('legend-loss', LOSS_STOPS, LOSS_MAX, 'Colonias perdidas:');
-  legend('legend-stress', STRESS_STOPS, STRESS_MAX, 'Colonias afectadas:');
-  select({});
-  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => select({}), 150); });
+  // ---------- filtro por territorio ----------
+  const sel = $('sel-estado');
+  const opts = ['US', ...Object.keys(D.series).filter(k => k !== 'US' && k !== 'OT').sort((a, b) => D.names[a].localeCompare(D.names[b]))];
+  sel.innerHTML = opts.map(k => `<option value="${k}">${D.names[k]}</option>`).join('');
+  sel.addEventListener('change', () => {
+    stopPlay();
+    S.abbr = sel.value; S.series = build(S.abbr);
+    storyText(); drawCurva(); render();
+  });
+
+  // ---------- inicio ----------
+  S.series = build('US');
+  drawPanal(); storyText(); drawCurva(); render();
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(drawCurva, 150); });
 })();

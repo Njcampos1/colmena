@@ -4,105 +4,59 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>La colmena que se apaga</title>
-  <meta name="description" content="Pérdida trimestral de colonias de abejas melíferas en EE.UU. (2015–2021), sus causas y el silencio de las abejas silvestres. Visualización con sonificación.">
+  <meta name="description" content="¿Qué le pasaría a 100 colmenas si nadie las repusiera? Pérdida trimestral de colonias de abejas en EE.UU., 2015–2021, con sonificación.">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <header class="top">
-    <div class="wrap">
-      <p class="kicker">IIC2026 · Entrega 1 · Borrador</p>
-      <h1>La colmena que se apaga</h1>
-      <p class="lede">
-        Cada trimestre, los apicultores de EE.UU. pierden entre el <strong>8&nbsp;% y el 18&nbsp;%</strong> de sus colonias.
-        Y en todos los trimestres la amenaza más frecuente es la misma: el ácaro <strong>varroa</strong>. Escucha cómo la colmena se debilita
-        cuando las amenazas aumentan.
-      </p>
-      <div class="controls" role="group" aria-label="Controles de sonido">
-        <button id="btn-sound" class="btn primary" aria-pressed="false">
-          <span class="dot" aria-hidden="true"></span><span class="lbl">Activar sonido</span>
-        </button>
-        <button id="btn-play" class="btn" aria-pressed="false">▶ Recorrer 2015–2021</button>
-        <span class="hint" id="sound-hint">El zumbido cambia de <em>tono</em>, <em>ritmo</em> y <em>aspereza</em> según los datos.</span>
+  <main class="page">
+    <header class="bar">
+      <span class="brand">La colmena que se apaga</span>
+      <label class="where">
+        <span class="sr">Territorio</span>
+        <select id="sel-estado" aria-label="Elegir territorio"></select>
+      </label>
+    </header>
+
+    <section class="stage">
+      <div class="copy">
+        <p class="kicker" id="kicker">Abejas melíferas · 2015–2021</p>
+        <div class="count" aria-live="polite">
+          <span class="num" id="num">100</span>
+          <span class="unit">colmenas vivas</span>
+        </div>
+        <p class="when" id="when">Ene–Mar 2015</p>
+
+        <div class="story">
+          <p class="line" id="l0">Cada trimestre muere cerca de <b>1 de cada 7</b> colmenas.<br>¿Qué pasaría si nadie las repusiera?</p>
+          <p class="line" id="l1" hidden>Quedarían <b id="l1-n">3</b>.</p>
+          <p class="line" id="l2" hidden>Pero en 2021 había casi las mismas colmenas que en 2015. Los apicultores <b>reemplazan</b> cada colmena que muere.</p>
+          <p class="line" id="l3" hidden>El zumbido sigue porque alguien lo sostiene.<br>Las abejas silvestres no tienen apicultor: en el mundo se registran <b>≈25&nbsp;% menos especies</b> que antes de 1990.</p>
+        </div>
+
+        <div class="actions">
+          <button id="btn-play" class="btn primary">▶ Escuchar</button>
+          <button id="btn-real" class="btn" hidden>Ver lo que realmente pasó</button>
+          <button id="btn-sound" class="btn ghost" aria-pressed="false" title="Sonido">🔈</button>
+        </div>
       </div>
-    </div>
-  </header>
 
-  <main class="wrap">
-    <section class="grid-2">
-      <article class="card" id="card-panal">
-        <header class="card-h">
-          <h2>El panal del tiempo</h2>
-          <p class="sub">Cada celda es un trimestre. Más oscura = mayor % de colonias perdidas. Se rotulan el trimestre elegido y el peor.
-            <span class="scope">Mostrando: <strong id="scope-name">Estados Unidos</strong></span></p>
-        </header>
-        <div id="panal" class="viz" aria-label="Panal de trimestres"></div>
-        <div id="legend-loss" class="legend"></div>
-      </article>
-
-      <article class="card" id="card-mapa">
-        <header class="card-h">
-          <h2>¿Dónde se pierden?</h2>
-          <p class="sub">Un hexágono por estado, en el trimestre <strong id="map-period">—</strong>. Haz clic en un estado para filtrar.</p>
-        </header>
-        <div id="mapa" class="viz" aria-label="Mapa hexagonal de estados"></div>
-        <div class="map-foot">
-          <button id="btn-us" class="btn small">Ver total nacional</button>
-          <span class="muted small-t"><span class="swatch hatch"></span> sin dato propio (USDA los agrupa en “Otros estados”)</span>
-        </div>
-      </article>
-    </section>
-
-    <section class="card" id="card-detalle">
-      <header class="card-h">
-        <h2>¿Qué está matando a las colmenas? <span class="muted" id="det-title">—</span></h2>
-        <p class="sub">% de colonias afectadas por cada amenaza (una colonia puede sufrir varias, por eso no suman 100). La columna marcada es el trimestre elegido.</p>
-      </header>
-      <div class="det-grid">
-        <div class="tiles" id="tiles"></div>
-        <div id="estres" class="viz" aria-label="Amenazas por trimestre"></div>
-      </div>
-      <div id="legend-stress" class="legend"></div>
-    </section>
-
-    <section class="card coda" id="card-coda">
-      <header class="card-h">
-        <h2>Pero la colmena no se apaga del todo</h2>
-        <p class="sub">
-          Aunque se pierde una de cada siete colonias por trimestre, el total casi no cambia:
-          los apicultores dividen colmenas y compran reinas para <strong>reponerlas</strong>.
-          Las abejas silvestres sufren las mismas amenazas (pesticidas, parásitos, clima), pero nadie las repone.
-        </p>
-      </header>
-      <div class="coda-grid">
-        <div class="stat">
-          <div class="big">≈ −25&nbsp;%</div>
-          <div class="stat-l">especies de abejas registradas en el mundo (2006–2015 vs. antes de 1990)</div>
-          <div class="src">Zattara &amp; Aizen, <em>One Earth</em>, 2021</div>
-        </div>
-        <div class="stat">
-          <div class="big">≈ −46&nbsp;%</div>
-          <div class="stat-l">probabilidad de encontrar abejorros en un lugar de Norteamérica (−17&nbsp;% en Europa)</div>
-          <div class="src">Soroye, Newbold &amp; Kerr, <em>Science</em>, 2020</div>
-        </div>
-        <div class="stat">
-          <div class="big">En peligro</div>
-          <div class="stat-l"><em>Bombus dahlbomii</em>, el abejorro nativo de Chile, desplazado por abejorros europeos introducidos</div>
-          <div class="src">Lista Roja UICN</div>
-        </div>
-        <div class="coda-play">
-          <button id="btn-coda" class="btn primary">▶ Escuchar el contraste</button>
-          <p class="muted small-t">La colmena manejada sigue zumbando. La voz silvestre se apaga y no vuelve.</p>
-          <div id="coda-meter" class="meter" aria-hidden="true">
-            <div><span>Colmena manejada</span><i id="m-hive"></i></div>
-            <div><span>Abejas silvestres</span><i id="m-wild"></i></div>
-          </div>
-        </div>
+      <div class="comb-wrap">
+        <div id="panal" aria-label="100 colmenas representadas como celdas de un panal"></div>
+        <ul class="key" id="key">
+          <li><i class="k viva"></i>viva</li>
+          <li><i class="k muerta"></i>muerta</li>
+          <li class="rep" hidden><i class="k repuesta"></i>repuesta por apicultores</li>
+        </ul>
       </div>
     </section>
 
-    <footer class="foot muted small-t">
-      Datos: USDA NASS, <em>Honey Bee Colonies</em> (2015–T2 2021), vía TidyTuesday 2022-01-11. El T2 2019 no fue encuestado por el USDA y aparece como hueco (y como silencio).
-      Estados con menos de 5 operaciones apícolas se agrupan en “Otros estados”.
+    <section class="timeline">
+      <div id="curva" aria-label="Curva de colmenas vivas por trimestre"></div>
+    </section>
+
+    <footer class="foot">
+      Datos: USDA NASS, <i>Honey Bee Colonies</i>, 2015–T2 2021 (vía TidyTuesday). “Sin reposición” encadena el % trimestral de colonias perdidas; “real” es el número de colonias indexado a 100.
+      Especies silvestres: Zattara &amp; Aizen, <i>One Earth</i> (2021).
     </footer>
   </main>
 
@@ -110,7 +64,7 @@
 
   <script src="js/vendor/d3.min.js"></script>
   <script src="data/data.js"></script>
-  <script src="js/sonido.js"></script>
+  <script src="js/zumbido.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
