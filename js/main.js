@@ -132,6 +132,11 @@
     // trimestres sin dato
     S.series.rows.forEach((r, q) => { if (r.missing) svg.append('rect').attr('class', 'gap').attr('x', x(q)).attr('width', x(q + 1) - x(q)).attr('y', m.t).attr('height', H - m.b - m.t); });
 
+    if (S.revealed) {
+      const realPts = S.series.real.map((v, t) => [x(t), y(v)]);
+      svg.append('path').attr('class', 'a-real').attr('d', d3.area().x(d => d[0]).y0(y(0)).y1(d => d[1])(realPts));
+    }
+
     const sinPts = S.series.sin.map((v, t) => [x(t), y(v)]);
     svg.append('path').attr('class', 'a-sin').attr('d', d3.area().x(d => d[0]).y0(y(0)).y1(d => d[1])(sinPts));
     svg.append('path').attr('class', 'l-sin').attr('d', d3.line()(sinPts));
@@ -171,6 +176,44 @@
   }
 
   // ======================================================
+  // indicador de mayor amenaza y descenso de población
+  // ======================================================
+  function updateAmenazaBanner(t) {
+    const el = $('amenaza-banner');
+    if (!el) return;
+    if (t === 0) {
+      el.innerHTML = '<span class="amenaza-muted">Inicio (100 colmenas). Avanza en la línea de tiempo o reproduce para ver las pérdidas y amenazas trimestrales.</span>';
+      return;
+    }
+    const q = t - 1;
+    const r = S.series.rows[q];
+    if (!r || r.missing || r.pct == null) {
+      el.innerHTML = `<b>${qLabel(q)}:</b> <span class="amenaza-muted">Sin datos registrados por el USDA en este trimestre.</span>`;
+      return;
+    }
+    const prev = Math.round(aliveAt(t - 1, S.mode));
+    const curr = Math.round(aliveAt(t, S.mode));
+    const diff = prev - curr;
+
+    const ts = topStress(r);
+    const amenaza = ts ? (stressLabel[ts.k] || ts.k) : null;
+    const amenazaTexto = ts
+      ? `disminución causada principalmente por <span class="threat-tag">${amenaza}</span> (${fmt1(ts.v)} % de colmenas afectadas)`
+      : '';
+
+    if (diff > 0) {
+      const colmStr = diff === 1 ? 'colmena' : 'colmenas';
+      el.innerHTML = `<b>${qLabel(q)}:</b> La población disminuyó en <b>${diff} ${colmStr}</b>${amenazaTexto}.`;
+    } else if (diff === 0) {
+      el.innerHTML = `<b>${qLabel(q)}:</b> La población se mantuvo estable este trimestre${amenaza ? ` (mayor amenaza registrada: <span class="threat-tag">${amenaza}</span>)` : ''}.`;
+    } else {
+      const ganadas = Math.abs(diff);
+      const colmStr = ganadas === 1 ? 'colmena' : 'colmenas';
+      el.innerHTML = `<b>${qLabel(q)}:</b> La población aumentó en <b>${ganadas} ${colmStr}</b> gracias a la reposición de apicultores, ${amenazaTexto}.`;
+    }
+  }
+
+  // ======================================================
   // estado -> pantalla
   // ======================================================
   function render() {
@@ -180,6 +223,7 @@
     paint();
     moveHead();
     Zumbido.setAlive(v);
+    updateAmenazaBanner(S.t);
   }
   function setT(t) { S.t = t; render(); if (t === N && S.mode === 'sin') showEnding(); }
 
@@ -230,6 +274,7 @@
         $('num').textContent = Math.round(aliveAt(S.t, S.mode));
         $('when').textContent = pointLabel(S.t) + (S.mode === 'real' ? ' · real' : ' · sin reposición');
         moveHead(); Zumbido.setAlive(aliveAt(S.t, S.mode), 0.9);
+        updateAmenazaBanner(S.t);
         if (S.t === N) { paint(); stopPlay(); if (S.mode === 'sin') showEnding(); else $('l3').hidden = false; return; }
         step();
       }, STEP);
@@ -263,6 +308,7 @@
     });
     $('when').textContent = pointLabel(S.t) + ' · real';
     moveHead();
+    updateAmenazaBanner(S.t);
     Zumbido.setAlive(to, 2.6);
     setTimeout(() => { $('l3').hidden = false; }, 2800);
   }

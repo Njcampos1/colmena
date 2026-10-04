@@ -90,12 +90,28 @@ select {
 .k.repuesta { background: var(--honey-2); }
 
 .timeline { padding-top: 6px; }
+.amenaza-banner {
+  min-height: 26px;
+  margin-bottom: 4px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  transition: opacity 0.25s ease;
+}
+.amenaza-banner b { color: var(--ink); font-weight: 700; }
+.amenaza-banner .threat-tag { color: var(--honey); font-weight: 700; }
+.amenaza-banner .amenaza-muted { color: var(--ink-3); font-style: italic; }
 #curva svg { display: block; width: 100%; height: auto; overflow: visible; }
 .ax { fill: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
 .grid { stroke: var(--line); stroke-width: 1; }
 .l-sin { fill: none; stroke: var(--honey); stroke-width: 2.5; }
 .a-sin { fill: var(--honey); opacity: .12; }
 .l-real { fill: none; stroke: var(--ink-2); stroke-width: 2; stroke-dasharray: 5 4; }
+.a-real { fill: var(--ink-2); opacity: .14; }
 .gap { fill: var(--line); opacity: .6; }
 .head { stroke: var(--ink); stroke-width: 1.5; }
 .head-dot { fill: var(--ink); }
