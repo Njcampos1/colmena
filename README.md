@@ -5,6 +5,7 @@
 ## Versiones
 
 - **V1:** entrega inicial. Tag `v1`.
-- **V2 (actual):** indicador de mayor amenaza trimestral sobre la curva y sombreado de reposición bajo la curva real. Tag `v2`.
+- **V2:** indicador de mayor amenaza trimestral sobre la curva y sombreado de reposición bajo la curva real. Tag `v2`.
+- **V3 (rama `mensaje-inmediato`):** mensaje primero. La intro se apaga sola (100 → 3 en ~3 s, sin clic) y termina en la frase; la vista principal abre con el titular, el panal ya apagado y la reposición a un clic. La animación lenta queda como “Ver cómo pasó”.
 
 1. Fuente: USDA NASS *Honey Bee Colonies*, trimestral por estado, 2015 T1–2021 T2 (vía TidyTuesday 2022-01-11).

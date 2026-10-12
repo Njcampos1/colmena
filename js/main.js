@@ -226,25 +226,25 @@
     Zumbido.setAlive(v);
     updateAmenazaBanner(S.t);
   }
-  function setT(t) { S.t = t; render(); if (t === N && S.mode === 'sin') showEnding(); }
+  function setT(t) { S.t = t; render(); }
 
+  // el mensaje va arriba, desde el primer segundo: cuántas quedarían y por qué no se nota
   function storyText() {
-    const s = S.series, endReal = s.real[N], endSin = Math.round(s.sin[N]);
-    $('l0').innerHTML = `Cada trimestre muere cerca de <b>1 de cada ${Math.round(100 / s.meanPct)}</b> colmenas.<br>¿Qué pasaría si nadie las repusiera?`;
-    $('l1-n').textContent = endSin;
+    const s = S.series, endReal = Math.round(s.real[N]), endSin = Math.round(s.sin[N]);
+    $('h-n').textContent = endSin;
+    $('intro-n').textContent = endSin;
     let a;
-    if (endReal >= 90 && endReal <= 110) a = 'Pero en 2021 había casi las mismas colmenas que en 2015.';
-    else if (endReal > 110) a = `Pero en 2021 había <b>más</b> colmenas que en 2015 (${Math.round(endReal)} por cada 100).`;
-    else a = `Pero en 2021 seguía habiendo ${Math.round(endReal)} de cada 100, no ${endSin}.`;
-    $('l2').innerHTML = a + ' Los apicultores <b>reemplazan</b> cada colmena que muere.';
+    if (endReal >= 90 && endReal <= 110) a = 'Aun así, en 2021 había casi las mismas que en 2015:';
+    else if (endReal > 110) a = `Aun así, en 2021 había <b>más</b> que en 2015 (${endReal} por cada 100):`;
+    else a = `Aun así, en 2021 seguía habiendo ${endReal} de cada 100, no ${endSin}:`;
+    $('sub').innerHTML = `Cada trimestre muere cerca de <b>1 de cada ${Math.round(100 / s.meanPct)}</b> colmenas. ${a} los apicultores <b>reponen</b> las que mueren.`;
     $('kicker').textContent = `Abejas melíferas · ${D.names[S.abbr]} · 2015–2021`;
   }
-  function showEnding() { $('l1').hidden = false; $('l2').hidden = false; $('btn-real').hidden = false; }
 
   // ---------- reproducción ----------
   const STEP = 1000; // ms por trimestre
   let timer = null;
-  function stopPlay() { clearTimeout(timer); timer = null; S.playing = false; $('btn-play').textContent = S.t >= N ? '↺ Otra vez' : '▶ Escuchar'; }
+  function stopPlay() { clearTimeout(timer); timer = null; S.playing = false; $('btn-play').textContent = S.t > 0 && S.t < N ? '▶ Continuar' : '▶ Ver cómo pasó'; }
   async function play() {
     if (S.playing) return stopPlay();
     await ensureSound();
@@ -276,7 +276,7 @@
         $('when').textContent = pointLabel(S.t) + (S.mode === 'real' ? ' · real' : ' · sin reposición');
         moveHead(); Zumbido.setAlive(aliveAt(S.t, S.mode), 0.9);
         updateAmenazaBanner(S.t);
-        if (S.t === N) { paint(); stopPlay(); if (S.mode === 'sin') showEnding(); else $('l3').hidden = false; return; }
+        if (S.t === N) { paint(); stopPlay(); if (S.mode === 'real') $('l3').hidden = false; return; }
         step();
       }, STEP);
     };
@@ -342,11 +342,11 @@
     <circle cx="36" cy="17" r="4" fill="#1a1208"/>
   </svg>`;
   function walkBees(intro) {
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
     const box = document.createElement('div');
     box.className = 'walkers';
     intro.prepend(box);
-    const bubble = intro.querySelector('.bubble');
+    const bubble = intro.querySelector('.intro-center');
     const bees = d3.range(4).map(() => {
       const el = document.createElement('div');
       el.className = 'walker'; el.innerHTML = BEE_SVG; box.appendChild(el);
@@ -363,6 +363,7 @@
       const W = innerWidth, H = innerHeight, m = 50;
       const r = bubble.getBoundingClientRect();
       bees.forEach(b => {
+        if (b.gone) return;
         if (b.pause > 0) {
           b.pause -= dt;
           b.el.classList.toggle('stopped', b.pause > 0);
@@ -382,7 +383,7 @@
           if (b.x > r.left - pad && b.x < r.right + pad && b.y > r.top - pad && b.y < r.bottom + pad + 40)
             avoid(b.x + (b.x - cx), b.y + (b.y - cy) * 3);
           // no encimarse con otra abeja
-          bees.forEach(o => { if (o !== b && Math.hypot(o.x - b.x, o.y - b.y) < 70) avoid(2 * b.x - o.x, 2 * b.y - o.y); });
+          bees.forEach(o => { if (o !== b && !o.gone && Math.hypot(o.x - b.x, o.y - b.y) < 70) avoid(2 * b.x - o.x, 2 * b.y - o.y); });
           b.a += steer * dt;
           b.x += Math.cos(b.a) * b.v * dt;
           b.y += Math.sin(b.a) * b.v * dt;
@@ -392,19 +393,48 @@
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
+    // con menos colmenas, menos abejas (queda una)
+    return {
+      setAlive(v) {
+        const keep = Math.max(1, Math.ceil(bees.length * v / 100));
+        bees.forEach((b, i) => { b.gone = i >= keep; b.el.classList.toggle('gone', b.gone); });
+      },
+    };
   }
 
-  // intro: el panal cubre la pantalla y pregunta; al hacer clic se encoge a su lugar y empiezan a apagarse
+  // intro automática: el panal cubre la pantalla y se apaga solo (100 → 3 en ~3 s),
+  // aparece el mensaje y el panal se encoge a su lugar. Un clic salta al final.
   function startIntro() {
-    const panal = $('panal'), svg = panal.querySelector('svg');
+    const panal = $('panal'), svg = panal.querySelector('svg'), intro = $('intro');
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const STEP_I = 125, WAIT = 900;          // ms por trimestre, pausa inicial con todo vivo
     panal.classList.add('full');
     svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
-    const go = () => {
-      const intro = $('intro');
-      if (intro.classList.contains('leaving')) return;
+    const bees = walkBees(intro);
+    let timers = [], finished = false, leaving = false;
+    const later = (f, ms) => timers.push(setTimeout(f, ms));
+    const showCount = t => {
+      $('intro-num').textContent = Math.round(S.series.sin[t]);
+      $('intro-when').textContent = pointLabel(t);
+      bees?.setAlive(S.series.sin[t]);
+    };
+
+    function finish() {
+      if (finished) return;
+      finished = true;
+      timers.forEach(clearTimeout); timers = [];
+      setT(N); showCount(N);
+      $('intro-msg').hidden = false;
+      $('intro-hint').textContent = 'Clic para continuar';
+      intro.classList.add('done');
+      later(leave, reduce ? 4000 : 2800);
+    }
+    function leave() {
+      if (leaving) return;
+      leaving = true;
+      timers.forEach(clearTimeout); timers = [];
       intro.classList.add('leaving');
       hideTip();
-      play();
       // de pantalla completa al rectángulo del hueco (FLIP con top/left/width/height)
       const r = $('panal-slot').getBoundingClientRect();
       Object.assign(panal.style, { top: '0px', left: '0px', width: innerWidth + 'px', height: innerHeight + 'px' });
@@ -417,12 +447,28 @@
         svg.removeAttribute('preserveAspectRatio');
         document.body.classList.remove('intro-open');
         intro.remove();
+        $('btn-real').focus({ preventScroll: true });
       }, 950);
-    };
-    walkBees($('intro'));
-    $('intro').addEventListener('click', go);
-    $('intro').addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); } });
-    $('intro').focus();
+    }
+    const next = () => (finished ? leave() : finish());
+
+    if (reduce) finish();
+    else {
+      const nodes = hexSel.nodes();
+      d3.range(1, N + 1).forEach(t => later(() => {
+        d3.range(CELLS).forEach(i => {
+          if (cellState(i, t - 1, 'sin') === 'viva' && cellState(i, t, 'sin') === 'muerta') {
+            nodes[i].setAttribute('class', 'hex muriendo');
+            later(() => nodes[i].setAttribute('class', 'hex muerta'), 160);
+          }
+        });
+        S.t = t; showCount(t);
+      }, WAIT + (t - 1) * STEP_I));
+      later(finish, WAIT + N * STEP_I + 300);
+    }
+    intro.addEventListener('click', next);
+    intro.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Escape') { ev.preventDefault(); next(); } });
+    intro.focus();
   }
   $('btn-real').addEventListener('click', reveal);
   addEventListener('keydown', ev => {
