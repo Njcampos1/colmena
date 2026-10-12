@@ -242,7 +242,7 @@
   }
 
   // ---------- reproducción ----------
-  const STEP = 1000; // ms por trimestre
+  const STEP = 400;  // ms por trimestre (~10 s en total)
   let timer = null;
   function stopPlay() { clearTimeout(timer); timer = null; S.playing = false; $('btn-play').textContent = S.t > 0 && S.t < N ? '▶ Continuar' : '▶ Ver cómo pasó'; }
   async function play() {
@@ -263,7 +263,7 @@
           Zumbido.death(delay / 1000);
           setTimeout(() => {
             const n = hexSel.nodes()[i]; n.setAttribute('class', 'hex muriendo');
-            setTimeout(() => n.setAttribute('class', 'hex ' + b), 180);
+            setTimeout(() => n.setAttribute('class', 'hex ' + b), 140);
           }, delay);
         } else {
           Zumbido.birth(delay / 1000);
