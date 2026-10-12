@@ -1,36 +1,23 @@
 :root {
-  color-scheme: light;
-  --bg: #f7f3ea;
-  --ink: #1e1a12;
-  --ink-2: #5d564a;
-  --ink-3: #9a9285;
-  --line: #ddd5c5;
-  --honey: #d98a14;
-  --honey-2: #f2cf8a;   /* repuesta */
-  --dead: transparent;
-  --dead-stroke: #cfc6b4;
-  --btn: #1e1a12;
-  --btn-ink: #f7f3ea;
-  --tip-bg: #1e1a12;
-  --tip-ink: #f7f3ea;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #12110e; --ink: #f4efe3; --ink-2: #bdb5a5; --ink-3: #7c7568; --line: #2e2b25;
-    --honey: #eaa63c; --honey-2: #7a5a2a; --dead-stroke: #3a362e;
-    --btn: #f4efe3; --btn-ink: #12110e; --tip-bg: #f4efe3; --tip-ink: #12110e;
-  }
-}
-:root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #12110e; --ink: #f4efe3; --ink-2: #bdb5a5; --ink-3: #7c7568; --line: #2e2b25;
-  --honey: #eaa63c; --honey-2: #7a5a2a; --dead-stroke: #3a362e;
-  --btn: #f4efe3; --btn-ink: #12110e; --tip-bg: #f4efe3; --tip-ink: #12110e;
+  --bg: #000;
+  --ink: #f4efe3;
+  --ink-2: #bdb5a5;
+  --ink-3: #7c7568;
+  --line: #262420;
+  --honey: #eaa63c;
+  --honey-2: #7a5a2a;   /* repuesta */
+  --dead: transparent;
+  --dead-stroke: #3a362e;
+  --btn: #f4efe3;
+  --btn-ink: #000;
+  --tip-bg: #f4efe3;
+  --tip-ink: #000;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+html { scrollbar-gutter: stable; }
 body {
   background: var(--bg); color: var(--ink);
   font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -72,7 +59,8 @@ select {
 .btn:focus-visible, select:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
 
 .comb-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-#panal { width: 100%; max-width: 560px; }
+#panal-slot { width: 100%; max-width: 560px; }
+#panal { width: 100%; height: 100%; }
 #panal svg { display: block; width: 100%; height: auto; overflow: visible; }
 .hex { stroke-width: 1.5; transition: fill .5s ease, stroke .5s ease; cursor: default; }
 .hex.viva { fill: var(--honey); stroke: var(--bg); animation: hum 1.6s ease-in-out infinite alternate; }
@@ -127,3 +115,38 @@ select {
   background: var(--tip-bg); color: var(--tip-ink); border-radius: 8px; padding: 8px 10px;
   font-size: 12.5px; line-height: 1.4; box-shadow: 0 8px 24px rgba(0,0,0,.2);
 }
+
+/* ---------- intro: el panal cubre la pantalla y pregunta ---------- */
+body.intro-open { overflow: hidden; }
+#panal.full { position: fixed; z-index: 20; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg); }
+#panal.full svg { height: 100%; }
+#panal.full .hex { cursor: pointer; }
+#panal.moving { transition: top .9s ease, left .9s ease, width .9s ease, height .9s ease; }
+.intro {
+  position: fixed; inset: 0; z-index: 21; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  padding: 24px 16px; text-align: center; transition: opacity .6s ease;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,.8) 0, rgba(0,0,0,.45) 40%, transparent 75%);
+}
+.intro.leaving { opacity: 0; pointer-events: none; }
+.intro:focus-visible { outline: none; }
+.intro:focus-visible .bubble { outline: 3px solid var(--honey); outline-offset: 4px; }
+.bubble {
+  max-width: 600px; margin: 0; background: var(--ink); color: #000; border-radius: 22px; padding: 20px 28px;
+  font-size: clamp(22px, 4vw, 36px); font-weight: 750; line-height: 1.2;
+  box-shadow: 0 12px 40px rgba(0,0,0,.6); animation: rise .8s ease both;
+}
+.hint { margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: .04em; text-shadow: 0 1px 6px #000; }
+
+/* abejas caminando sobre el panal (intro) */
+.walkers { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.walker { position: absolute; left: 0; top: 0; width: 72px; height: 56px; margin: -28px 0 0 -36px; will-change: transform;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,.45)); }
+.walker svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.walker .legs-a, .walker .legs-b { animation: scuttle .14s linear infinite alternate; }
+.walker .legs-b { animation-direction: alternate-reverse; }
+.walker .antenna { transform-box: view-box; transform-origin: 36px 17px; animation: feel 1.4s ease-in-out infinite alternate; }
+.walker.stopped .legs-a, .walker.stopped .legs-b { animation-play-state: paused; }
+@keyframes scuttle { from { transform: translateX(-1.6px); } to { transform: translateX(1.6px); } }
+@keyframes feel { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
+.bubble, .hint { position: relative; z-index: 1; }

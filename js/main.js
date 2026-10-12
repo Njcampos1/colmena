@@ -83,6 +83,7 @@
     const W = cols * w + w / 2 + 4, H = rows * 1.5 * r + r / 2 + 4;
     const hex = d3.range(6).map(k => { const a = Math.PI / 180 * (60 * k - 30); return [(r - 1.5) * Math.cos(a), (r - 1.5) * Math.sin(a)]; });
     const path = 'M' + hex.join('L') + 'Z';
+    $('panal-slot').style.aspectRatio = `${W} / ${H}`;   // el hueco conserva su tamaño mientras el panal cubre la pantalla
     el.innerHTML = '';
     const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img');
     hexSel = svg.selectAll('path').data(d3.range(CELLS)).join('path')
@@ -323,9 +324,110 @@
     else await ensureSound();
   });
   $('btn-play').addEventListener('click', play);
+
+  // abejas vistas desde arriba que caminan al azar sobre el panal, se detienen a ratos y esquivan la pregunta
+  const BEE_SVG = `<svg viewBox="0 0 44 34" aria-hidden="true">
+    <g stroke="#1a1208" stroke-width="1.4" stroke-linecap="round" fill="none">
+      <g class="legs-a"><path d="M24 12 L21 4"/><path d="M28 22 L31 30"/><path d="M19 22 L14 30"/></g>
+      <g class="legs-b"><path d="M24 22 L21 30"/><path d="M28 12 L31 4"/><path d="M19 12 L14 4"/></g>
+      <g class="antenna"><path d="M38 15 Q42 11 44 8"/><path d="M38 19 Q42 23 44 26"/></g>
+    </g>
+    <clipPath id="walker-abd"><ellipse cx="15" cy="17" rx="12" ry="8"/></clipPath>
+    <ellipse cx="15" cy="17" rx="12" ry="8" fill="#f5c518"/>
+    <g clip-path="url(#walker-abd)" fill="#1a1208"><rect x="6" y="8" width="3" height="18"/><rect x="12" y="8" width="3" height="18"/><rect x="18" y="8" width="3" height="18"/></g>
+    <path d="M3 17 L0 17" stroke="#1a1208" stroke-width="1.5"/>
+    <ellipse cx="18" cy="12" rx="10" ry="4.5" transform="rotate(-14 18 12)" fill="rgba(255,255,255,.32)" stroke="rgba(255,255,255,.8)" stroke-width=".6"/>
+    <ellipse cx="18" cy="22" rx="10" ry="4.5" transform="rotate(14 18 22)" fill="rgba(255,255,255,.32)" stroke="rgba(255,255,255,.8)" stroke-width=".6"/>
+    <circle cx="29" cy="17" r="5" fill="#4a3412"/>
+    <circle cx="36" cy="17" r="4" fill="#1a1208"/>
+  </svg>`;
+  function walkBees(intro) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const box = document.createElement('div');
+    box.className = 'walkers';
+    intro.prepend(box);
+    const bubble = intro.querySelector('.bubble');
+    const bees = d3.range(4).map(() => {
+      const el = document.createElement('div');
+      el.className = 'walker'; el.innerHTML = BEE_SVG; box.appendChild(el);
+      // empiezan en los bordes, lejos de la pregunta
+      const side = Math.random() < 0.5;
+      return { el, x: side ? innerWidth * (0.08 + Math.random() * 0.2) : innerWidth * (0.72 + Math.random() * 0.2),
+        y: innerHeight * (0.12 + Math.random() * 0.76), a: Math.random() * Math.PI * 2,
+        v: 34 + Math.random() * 22, pause: 0, turn: 0 };
+    });
+    let last = performance.now();
+    function tick(now) {
+      if (!intro.isConnected) return;
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      const W = innerWidth, H = innerHeight, m = 50;
+      const r = bubble.getBoundingClientRect();
+      bees.forEach(b => {
+        if (b.pause > 0) {
+          b.pause -= dt;
+          b.el.classList.toggle('stopped', b.pause > 0);
+        } else {
+          if (Math.random() < dt * 0.25) b.pause = 0.6 + Math.random() * 1.6;    // se detiene un momento
+          b.turn += (Math.random() - 0.5) * 6 * dt;                               // deambula
+          b.turn = Math.max(-1.6, Math.min(1.6, b.turn));
+          let steer = b.turn;
+          // fuera de los márgenes o sobre la pregunta: gira hacia afuera de ese obstáculo
+          const avoid = (tx, ty) => {
+            const want = Math.atan2(ty - b.y, tx - b.x);
+            const d = Math.atan2(Math.sin(want - b.a), Math.cos(want - b.a));
+            steer = d * 3;
+          };
+          if (b.x < m || b.x > W - m || b.y < m || b.y > H - m) avoid(W / 2, H / 2);
+          const pad = 40, cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+          if (b.x > r.left - pad && b.x < r.right + pad && b.y > r.top - pad && b.y < r.bottom + pad + 40)
+            avoid(b.x + (b.x - cx), b.y + (b.y - cy) * 3);
+          // no encimarse con otra abeja
+          bees.forEach(o => { if (o !== b && Math.hypot(o.x - b.x, o.y - b.y) < 70) avoid(2 * b.x - o.x, 2 * b.y - o.y); });
+          b.a += steer * dt;
+          b.x += Math.cos(b.a) * b.v * dt;
+          b.y += Math.sin(b.a) * b.v * dt;
+        }
+        b.el.style.transform = `translate(${b.x}px, ${b.y}px) rotate(${b.a}rad)`;
+      });
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // intro: el panal cubre la pantalla y pregunta; al hacer clic se encoge a su lugar y empiezan a apagarse
+  function startIntro() {
+    const panal = $('panal'), svg = panal.querySelector('svg');
+    panal.classList.add('full');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    const go = () => {
+      const intro = $('intro');
+      if (intro.classList.contains('leaving')) return;
+      intro.classList.add('leaving');
+      hideTip();
+      play();
+      // de pantalla completa al rectángulo del hueco (FLIP con top/left/width/height)
+      const r = $('panal-slot').getBoundingClientRect();
+      Object.assign(panal.style, { top: '0px', left: '0px', width: innerWidth + 'px', height: innerHeight + 'px' });
+      panal.offsetWidth;
+      panal.classList.add('moving');
+      Object.assign(panal.style, { top: r.top + 'px', left: r.left + 'px', width: r.width + 'px', height: r.height + 'px' });
+      setTimeout(() => {
+        panal.classList.remove('full', 'moving');
+        panal.removeAttribute('style');
+        svg.removeAttribute('preserveAspectRatio');
+        document.body.classList.remove('intro-open');
+        intro.remove();
+      }, 950);
+    };
+    walkBees($('intro'));
+    $('intro').addEventListener('click', go);
+    $('intro').addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); } });
+    $('intro').focus();
+  }
   $('btn-real').addEventListener('click', reveal);
   addEventListener('keydown', ev => {
     if (ev.target.tagName === 'SELECT') return;
+    if ($('intro')) return;
     if (ev.key === 'ArrowRight') { stopPlay(); setT(Math.min(N, S.t + 1)); }
     if (ev.key === 'ArrowLeft') { stopPlay(); setT(Math.max(0, S.t - 1)); }
   });
@@ -343,5 +445,6 @@
   // ---------- inicio ----------
   S.series = build('US');
   drawPanal(); storyText(); drawCurva(); render();
+  startIntro();
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(drawCurva, 150); });
 })();

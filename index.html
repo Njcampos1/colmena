@@ -7,7 +7,12 @@
   <meta name="description" content="¿Qué le pasaría a 100 colmenas si nadie las repusiera? Pérdida trimestral de colonias de abejas en EE.UU., 2015–2021, con sonificación.">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="intro-open">
+  <div class="intro" id="intro" role="button" tabindex="0" aria-label="Descubrirlo: ver cómo se apagan las colmenas">
+    <p class="bubble">¿Cuántas abejas quedarían sin la intervención del humano?</p>
+    <p class="hint">Haz clic para descubrirlo</p>
+  </div>
+
   <main class="page">
     <header class="bar">
       <span class="brand">La colmena que se apaga</span>
@@ -41,7 +46,7 @@
       </div>
 
       <div class="comb-wrap">
-        <div id="panal" aria-label="100 colmenas representadas como celdas de un panal"></div>
+        <div id="panal-slot"><div id="panal" aria-label="100 colmenas representadas como celdas de un panal"></div></div>
         <ul class="key" id="key">
           <li><i class="k viva"></i>viva</li>
           <li><i class="k muerta"></i>muerta</li>
