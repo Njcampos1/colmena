@@ -8,9 +8,13 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="intro-open">
-  <div class="intro" id="intro" role="button" tabindex="0" aria-label="Descubrirlo: ver cómo se apagan las colmenas">
-    <p class="bubble">¿Cuántas abejas quedarían sin la intervención del humano?</p>
-    <p class="hint">Haz clic para descubrirlo</p>
+  <div class="intro" id="intro" role="button" tabindex="0" aria-label="Saltar la introducción">
+    <div class="intro-center">
+      <p class="intro-count"><span id="intro-num">100</span><span class="intro-unit">colmenas</span></p>
+      <p class="intro-when" id="intro-when">ene 2015</p>
+      <p class="bubble" id="intro-msg" hidden>Sin apicultores, de 100 colmenas quedarían <b id="intro-n">3</b>.</p>
+    </div>
+    <p class="hint" id="intro-hint">Clic para saltar</p>
   </div>
 
   <main class="page">
@@ -25,6 +29,8 @@
     <section class="stage">
       <div class="copy">
         <p class="kicker" id="kicker">Abejas melíferas · 2015–2021</p>
+        <h1 class="headline" id="headline">Sin apicultores, de 100 colmenas quedarían <b id="h-n">3</b>.</h1>
+        <p class="sub" id="sub"></p>
         <div class="count" aria-live="polite">
           <span class="num" id="num">100</span>
           <span class="unit">colmenas vivas</span>
@@ -32,15 +38,12 @@
         <p class="when" id="when">Ene–Mar 2015</p>
 
         <div class="story">
-          <p class="line" id="l0">Cada trimestre muere cerca de <b>1 de cada 7</b> colmenas.<br>¿Qué pasaría si nadie las repusiera?</p>
-          <p class="line" id="l1" hidden>Quedarían <b id="l1-n">3</b>.</p>
-          <p class="line" id="l2" hidden>Pero en 2021 había casi las mismas colmenas que en 2015. Los apicultores <b>reemplazan</b> cada colmena que muere.</p>
           <p class="line" id="l3" hidden>El zumbido sigue porque alguien lo sostiene.<br>Las abejas silvestres no tienen apicultor: en el mundo se registran <b>≈25&nbsp;% menos especies</b> que antes de 1990.</p>
         </div>
 
         <div class="actions">
-          <button id="btn-play" class="btn primary">▶ Escuchar</button>
-          <button id="btn-real" class="btn" hidden>Ver lo que realmente pasó</button>
+          <button id="btn-real" class="btn primary">Ver lo que realmente pasó</button>
+          <button id="btn-play" class="btn">▶ Ver cómo pasó</button>
           <button id="btn-sound" class="btn ghost" aria-pressed="false" title="Sonido">🔈</button>
         </div>
       </div>
