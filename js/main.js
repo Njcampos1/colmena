@@ -325,6 +325,20 @@
   });
   $('btn-play').addEventListener('click', play);
 
+  // al terminar la intro empieza el zumbido. El navegador solo deja sonar audio después de un
+  // gesto del usuario: si aún no lo hubo, arranca con el primer clic, toque o tecla en la página.
+  function autoSound() {
+    const evs = ['pointerdown', 'keydown'];
+    const off = () => evs.forEach(e => removeEventListener(e, start, true));
+    const start = ev => {
+      if (ev?.target.closest?.('#btn-sound')) return off();   // el botón de sonido decide por sí mismo
+      if (Zumbido.on) return off();
+      ensureSound().then(off);                                 // si el navegador lo bloquea, queda pendiente hasta el próximo gesto
+    };
+    evs.forEach(e => addEventListener(e, start, true));
+    start();
+  }
+
   // abejas vistas desde arriba que caminan al azar sobre el panal, se detienen a ratos y esquivan la pregunta
   const BEE_SVG = `<svg viewBox="0 0 44 34" aria-hidden="true">
     <g stroke="#1a1208" stroke-width="1.4" stroke-linecap="round" fill="none">
@@ -425,7 +439,7 @@
       timers.forEach(clearTimeout); timers = [];
       setT(N); showCount(N);
       $('intro-msg').hidden = false;
-      $('intro-hint').textContent = 'Clic para continuar';
+      $('intro-hint').textContent = 'Clic para continuar 🔊';
       intro.classList.add('done');
       later(leave, reduce ? 4000 : 2800);
     }
@@ -435,6 +449,7 @@
       timers.forEach(clearTimeout); timers = [];
       intro.classList.add('leaving');
       hideTip();
+      autoSound();
       // de pantalla completa al rectángulo del hueco (FLIP con top/left/width/height)
       const r = $('panal-slot').getBoundingClientRect();
       Object.assign(panal.style, { top: '0px', left: '0px', width: innerWidth + 'px', height: innerHeight + 'px' });
