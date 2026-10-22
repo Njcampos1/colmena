@@ -1,4 +1,4 @@
-/* La colmena que se apaga — V2 (versión concisa)
+/* La colmena que se apaga — V4
  * 100 colmenas. Cada trimestre muere el % que reportó el USDA.
  * Sin reposición: se apagan hasta quedar ~3.  Real: los apicultores las reponen.
  */
@@ -14,11 +14,11 @@
   const $ = id => document.getElementById(id);
   const tip = $('tip');
 
-  const S = { abbr: 'US', t: 0, mode: 'sin', revealed: false, playing: false, series: null };
+  const S = { t: 0, mode: 'sin', revealed: false, playing: false, series: null };
 
   // ---------- modelo ----------
-  function build(abbr) {
-    const rows = D.series[abbr];
+  function build() {
+    const rows = D.series.US;
     const sin = [100];
     rows.forEach((r, t) => sin.push(sin[t] * (1 - (r.missing || r.pct == null ? 0 : r.pct) / 100)));
     const n0 = rows.find(r => r.n)?.n;
@@ -192,26 +192,24 @@
       el.innerHTML = `<b>${qLabel(q)}:</b> <span class="amenaza-muted">Sin datos registrados por el USDA en este trimestre.</span>`;
       return;
     }
+    if (S.mode === 'real' && t === N) {         // el USDA no publicó el conteo de jul 2021: la curva real repite el último
+      el.innerHTML = `<b>${qLabel(q)}:</b> <span class="amenaza-muted">El USDA no publicó el conteo de cierre (jul 2021); la curva real repite el último dato.</span>`;
+      return;
+    }
     const prev = Math.round(aliveAt(t - 1, S.mode));
     const curr = Math.round(aliveAt(t, S.mode));
     const diff = prev - curr;
 
     const ts = topStress(r);
-    const amenaza = ts ? (stressLabel[ts.k] || ts.k) : null;
-    const amenazaTexto = ts
-      ? `disminución causada principalmente por <span class="threat-tag">${amenaza}</span> (${fmt1(ts.v)} % de colmenas afectadas)`
-      : '';
+    const amenaza = ts ? `<span class="threat-tag">${stressLabel[ts.k] || ts.k}</span> (${fmt1(ts.v)} % de colmenas afectadas)` : null;
+    const colmenas = n => `<b>${n} ${n === 1 ? 'colmena' : 'colmenas'}</b>`;
 
-    if (diff > 0) {
-      const colmStr = diff === 1 ? 'colmena' : 'colmenas';
-      el.innerHTML = `<b>${qLabel(q)}:</b> La población disminuyó en <b>${diff} ${colmStr}</b>${amenazaTexto}.`;
-    } else if (diff === 0) {
-      el.innerHTML = `<b>${qLabel(q)}:</b> La población se mantuvo estable este trimestre${amenaza ? ` (mayor amenaza registrada: <span class="threat-tag">${amenaza}</span>)` : ''}.`;
-    } else {
-      const ganadas = Math.abs(diff);
-      const colmStr = ganadas === 1 ? 'colmena' : 'colmenas';
-      el.innerHTML = `<b>${qLabel(q)}:</b> La población aumentó en <b>${ganadas} ${colmStr}</b> gracias a la reposición de apicultores, ${amenazaTexto}.`;
-    }
+    let txt;
+    if (diff > 0) txt = `La población disminuyó en ${colmenas(diff)}${amenaza ? `, sobre todo por ${amenaza}` : ''}.`;
+    else if (diff === 0) txt = (S.mode === 'sin' ? `Quedan ${colmenas(curr)} de 100: murió menos de una este trimestre` : 'La población se mantuvo estable') +
+      (amenaza ? `. Mayor amenaza registrada: ${amenaza}` : '') + '.';
+    else txt = `La población aumentó en ${colmenas(-diff)}: los apicultores repusieron más de las que murieron${amenaza ? `. Mayor amenaza registrada: ${amenaza}` : ''}.`;
+    el.innerHTML = `<b>${qLabel(q)}:</b> ${txt}`;
   }
 
   // ======================================================
@@ -237,14 +235,16 @@
     if (endReal >= 90 && endReal <= 110) a = 'Aun así, en 2021 había casi las mismas que en 2015:';
     else if (endReal > 110) a = `Aun así, en 2021 había <b>más</b> que en 2015 (${endReal} por cada 100):`;
     else a = `Aun así, en 2021 seguía habiendo ${endReal} de cada 100, no ${endSin}:`;
+    const tops = s.rows.map(topStress).filter(Boolean);
+    const nV = tops.filter(ts => ts.k === 'varroa').length;
+    $('nota-varroa').innerHTML = `La <b>varroa</b>, un ácaro parásito, fue la mayor amenaza en <b>${nV} de ${tops.length}</b> trimestres con dato.`;
     $('sub').innerHTML = `Cada trimestre muere cerca de <b>1 de cada ${Math.round(100 / s.meanPct)}</b> colmenas. ${a} los apicultores <b>reponen</b> las que mueren.`;
-    $('kicker').textContent = `Abejas melíferas · ${D.names[S.abbr]} · 2015–2021`;
   }
 
   // ---------- reproducción ----------
   const STEP = 400;  // ms por trimestre (~10 s en total)
   let timer = null;
-  function stopPlay() { clearTimeout(timer); timer = null; S.playing = false; $('btn-play').textContent = S.t > 0 && S.t < N ? '▶ Continuar' : '▶ Ver cómo pasó'; }
+  function stopPlay() { clearTimeout(timer); timer = null; S.playing = false; $('btn-play').textContent = S.t > 0 && S.t < N ? '▶ Continuar' : '▶ Reproducir 2015–2021'; }
   async function play() {
     if (S.playing) return stopPlay();
     await ensureSound();
@@ -487,24 +487,13 @@
   }
   $('btn-real').addEventListener('click', reveal);
   addEventListener('keydown', ev => {
-    if (ev.target.tagName === 'SELECT') return;
     if ($('intro')) return;
     if (ev.key === 'ArrowRight') { stopPlay(); setT(Math.min(N, S.t + 1)); }
     if (ev.key === 'ArrowLeft') { stopPlay(); setT(Math.max(0, S.t - 1)); }
   });
 
-  // ---------- filtro por territorio ----------
-  const sel = $('sel-estado');
-  const opts = ['US', ...Object.keys(D.series).filter(k => k !== 'US' && k !== 'OT').sort((a, b) => D.names[a].localeCompare(D.names[b]))];
-  sel.innerHTML = opts.map(k => `<option value="${k}">${D.names[k]}</option>`).join('');
-  sel.addEventListener('change', () => {
-    stopPlay();
-    S.abbr = sel.value; S.series = build(S.abbr);
-    storyText(); drawCurva(); render();
-  });
-
   // ---------- inicio ----------
-  S.series = build('US');
+  S.series = build();
   drawPanal(); storyText(); drawCurva(); render();
   startIntro();
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(drawCurva, 150); });

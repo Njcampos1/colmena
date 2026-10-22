@@ -20,17 +20,14 @@
   <main class="page">
     <header class="bar">
       <span class="brand">La colmena que se apaga</span>
-      <label class="where">
-        <span class="sr">Territorio</span>
-        <select id="sel-estado" aria-label="Elegir territorio"></select>
-      </label>
     </header>
 
     <section class="stage">
       <div class="copy">
-        <p class="kicker" id="kicker">Abejas melíferas · 2015–2021</p>
+        <p class="kicker" id="kicker">Abejas melíferas · Estados Unidos · 2015–2021</p>
         <h1 class="headline" id="headline">Sin apicultores, de 100 colmenas quedarían <b id="h-n">3</b>.</h1>
         <p class="sub" id="sub"></p>
+        <p class="nota" id="nota-varroa"></p>
         <div class="count" aria-live="polite">
           <span class="num" id="num">100</span>
           <span class="unit">colmenas vivas</span>
@@ -43,9 +40,10 @@
 
         <div class="actions">
           <button id="btn-real" class="btn primary">Ver lo que realmente pasó</button>
-          <button id="btn-play" class="btn">▶ Ver cómo pasó</button>
+          <button id="btn-play" class="btn">▶ Reproducir 2015–2021</button>
           <button id="btn-sound" class="btn ghost" aria-pressed="false" title="Sonido">🔈</button>
         </div>
+        <p class="nota sonido">🔊 Cada abeja que se oye ≈ 6 colmenas vivas · zumbido que cae: muere una colmena · zumbido que sube: un apicultor la repone.</p>
       </div>
 
       <div class="comb-wrap">
@@ -65,6 +63,7 @@
 
     <footer class="foot">
       Datos: USDA NASS, <i>Honey Bee Colonies</i>, 2015–T2 2021 (vía TidyTuesday). “Sin reposición” encadena el % trimestral de colonias perdidas; “real” es el número de colonias indexado a 100.
+      Solo se muestra el total nacional: los apicultores trasladan colmenas entre estados para polinizar, así que el conteo de cada estado no refleja cuántas mueren.
       Especies silvestres: Zattara &amp; Aizen, <i>One Earth</i> (2021).
     </footer>
   </main>
