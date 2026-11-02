@@ -60,6 +60,29 @@ body {
 .btn[aria-pressed="false"].ghost { opacity: .55; }
 .btn:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
 
+/* enlace con el teléfono del panal (js/enlace.js): arriba a la derecha, discreto */
+.enlace { position: relative; }
+.enlace-btn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font: inherit; font-size: 12px; color: var(--ink-3); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; opacity: .7;
+}
+.enlace-btn:hover, .enlace-btn[aria-expanded="true"] { opacity: 1; color: var(--ink-2); }
+.enlace-btn:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
+.enlace-code { font-variant-numeric: tabular-nums; letter-spacing: .06em; }
+.enlace-code:empty { display: none; }
+.enlace-dot { display: none; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--honey); }
+.enlace[data-state] .enlace-dot { display: inline-block; }
+.enlace[data-state="ok"] .enlace-dot { background: var(--honey); }
+.enlace[data-state="error"] .enlace-dot { border-color: #e2725b; background: #e2725b; }
+.enlace-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: min(300px, calc(100vw - 32px));
+  background: #11100d; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  font-size: 13px; line-height: 1.45; color: var(--ink-2); overflow-wrap: anywhere;
+}
+.enlace-pop b { color: var(--ink); }
+.enlace-pop .enlace-num { color: var(--honey); }
+
 .comb-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 #panal-slot { width: 100%; max-width: 560px; }
 #panal { width: 100%; height: 100%; }
