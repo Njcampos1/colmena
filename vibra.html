@@ -147,13 +147,16 @@
 
     // ---------- patrones ----------
     // zumbido continuo con fuerza i (0–1) durante ms
-    // el motor de un teléfono no alcanza a girar con menos de ~30 ms: ese es el pulso mínimo
+    // La web no deja elegir la fuerza del motor, solo cuánto rato está encendido.
+    // Con 100 colmenas vibra sin pausa; con pocas, pulsos sueltos de al menos 45 ms (con menos el motor
+    // no alcanza a girar). La raíz cuadrada hace que los valores bajos todavía se sientan.
     const pulse = i => {
-      i = Math.max(0, Math.min(1, i));            // en modo real puede pasar de 100
-      return { on: Math.round(30 + 40 * i), off: Math.round(20 + 250 * (1 - i)) };
+      i = Math.sqrt(Math.max(0, Math.min(1, i)));   // en modo real puede pasar de 100
+      return { on: Math.round(45 + 155 * i), off: Math.round(260 * (1 - i)) };
     };
     function buzz(i, ms) {
       const { on, off } = pulse(i);
+      if (!off) return [ms, 0];
       const p = [];
       for (let used = 0; used + on <= ms; used += on + off) p.push(on, Math.min(off, ms - used - on));
       return p;
@@ -163,11 +166,11 @@
       if (r.missing || r.pct == null) return { p: [0, Q], alive: (mode === 'sin' ? sin : real)[t + 1] };
       const alive = (mode === 'sin' ? sin : real)[t + 1];
       const hit = Math.round(150 + 25 * r.pct);   // 8 % -> 350 ms, 18 % -> 600 ms
-      const p = [hit, 220];
+      const p = [hit, 250];
       if (mode === 'real' && r.added && r.n) {
         const k = Math.max(1, Math.min(4, Math.round((r.added / r.n) * 100 / 6)));
-        for (let j = 0; j < k; j++) p.push(60, 70);
-        p[p.length - 1] = 160;
+        for (let j = 0; j < k; j++) p.push(80, 80);
+        p[p.length - 1] = 180;
       }
       const used = p.reduce((a, b) => a + b, 0);
       return { p: p.concat(buzz(alive / 100, Math.max(0, Q - used))), alive, hit: true };
@@ -264,7 +267,8 @@
     // alive -> zumbido continuo · death -> golpe y un respiro · birth -> tres toques cortos
     function remoteBuild() {
       if (!run) return;
-      const RES = 5, WIN = 700, now = performance.now();
+      // ventana larga y pocas renovaciones: cada vibrate() reinicia el motor y lo debilita
+      const RES = 5, WIN = 1600, now = performance.now();
       const n = WIN / RES, bits = new Uint8Array(n);
       const { on, off } = pulse(run.alive / 100), per = on + off;
       if (run.alive > 0.5) for (let k = 0; k < n; k++) bits[k] = (now + k * RES) % per < on ? 1 : 0;
@@ -272,8 +276,8 @@
       const set = (a, b, v) => { for (let k = Math.max(0, Math.floor((a - now) / RES)); k < Math.min(n, (b - now) / RES); k++) bits[k] = v; };
       const hits = [];
       run.events.forEach(e => {
-        if (e.k === 'death') { set(e.at + 130, e.at + 220, 0); hits.push([e.at, e.at + 130]); }
-        else [0, 100, 200].forEach(d => hits.push([e.at + d, e.at + d + 45]));
+        if (e.k === 'death') { set(e.at + 220, e.at + 340, 0); hits.push([e.at, e.at + 220]); }
+        else [0, 150, 300].forEach(d => hits.push([e.at + d, e.at + d + 80]));
       });
       hits.forEach(([a, b]) => set(a, b, 1));
       // de bits a patrón [on, off, on, …]
@@ -305,7 +309,8 @@
         run.events.push({ k: msg.k, at: performance.now() + (msg.at || 0) * 1000 });
         if (z) Zumbido[msg.k](msg.at || 0);
       }
-      remoteBuild();
+      // los mensajes llegan en ráfagas (todas las muertes de un trimestre juntas): un solo vibrate() por ráfaga
+      if (!run.pending) run.pending = setTimeout(() => { if (run) { run.pending = null; remoteBuild(); } }, 40);
     }
 
     async function follow() {
@@ -369,7 +374,7 @@
         c.on('close', () => { if (c === conn) again('El computador se desconectó · reconectando…'); });
       }
       newPeer();
-      run.iv = setInterval(remoteBuild, 400);
+      run.iv = setInterval(remoteBuild, 1000);
     }
 
     function stop() {
