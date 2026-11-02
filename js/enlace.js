@@ -41,6 +41,10 @@
       show('Conectando…');
       peer.on('open', () => show(`📱 En el teléfono abre <b>${location.origin}${location.pathname.replace(/[^/]*$/, '')}vibra.html</b>, elige “Seguir al computador” y escribe <b style="color:var(--honey)">${code}</b>.`));
       peer.on('connection', c => {
+        show(`📱 Un teléfono está intentando conectarse (código ${code})…`);
+        setTimeout(() => {
+          if (!c.open) show(`📱 El teléfono encontró este computador, pero la red bloquea la conexión directa. Pongan ambos en el mismo wifi o en el hotspot del teléfono. Código <b style="color:var(--honey)">${code}</b>.`);
+        }, 12000);
         c.on('open', () => {
           conns.push(c);
           c.send({ k: 'alive', v: last });

@@ -310,30 +310,53 @@
       $('when').textContent = 'Conectando al computador…';
       if (!window.Peer) { $('when').textContent = 'No se pudo cargar PeerJS (¿sin internet?)'; return; }
       try { localStorage.setItem('colmena-panal-codigo', code); } catch (e) {}
-      const peer = run.peer = new Peer();
-      // si el computador recarga la página, se reintenta cada 2 s hasta que vuelva con el mismo código
+      // dos pasos: (1) llegar al servidor de PeerJS, (2) conexión directa con el computador.
+      // Cada paso tiene un plazo; si no llega, se dice cuál falló y se reintenta.
+      // Si el computador recarga la página, se reintenta cada 2 s hasta que vuelva con el mismo código.
       const me = run;
-      let conn = null, retry = null;
-      const again = msg => {
+      const say = msg => { if (run === me) $('when').textContent = msg; };
+      let peer = null, conn = null, retry = null, watch = null;
+      const again = (msg, ms = 2000) => {
         if (run !== me) return;
-        $('when').textContent = msg;
-        clearTimeout(retry); retry = setTimeout(dial, 2000);
+        say(msg);
+        clearTimeout(retry); retry = setTimeout(dial, ms);
       };
+      function newPeer() {
+        try { peer?.destroy(); } catch (e) {}
+        peer = run.peer = new Peer();
+        say('1/2 · Buscando el servidor de enlace…');
+        clearTimeout(watch);
+        watch = setTimeout(() => {
+          if (run !== me || peer.open) return;
+          say('1/2 · No llega al servidor de enlace. ¿Internet en el teléfono? Reintentando…');
+          setTimeout(newPeer, 1500);
+        }, 10000);
+        peer.on('open', dial);
+        peer.on('disconnected', () => { if (!peer.destroyed) again('Sin conexión al servidor · reconectando…'); });
+        peer.on('error', e => {
+          if (e.type === 'peer-unavailable') again(`2/2 · No hay computador abierto con el código ${code}. Reintentando…`);
+          else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error') again(`1/2 · Error de red (${e.type}). Reintentando…`, 4000);
+          else say(`No se pudo enlazar (${e.type}).`);
+        });
+      }
       function dial() {
         if (run !== me) return;
-        if (peer.disconnected) peer.reconnect();
+        if (peer.disconnected) { peer.reconnect(); return; }
+        say(`2/2 · Servidor OK. Conectando con el computador ${code}…`);
+        try { conn?.close(); } catch (e) {}
         conn = peer.connect('colmena-panal-' + code, { reliable: true });
         const c = conn;
-        c.on('open', () => { clearTimeout(retry); $('when').textContent = `Conectado (${code}) · sigue la pantalla del computador`; });
+        clearTimeout(watch);
+        watch = setTimeout(() => {
+          if (run !== me || c !== conn || c.open) return;
+          // el servidor encontró el computador, pero la conexión directa no se abre (redes distintas o bloqueadas)
+          again('2/2 · El computador está, pero la red bloquea la conexión directa. Pongan ambos en el mismo wifi o en el hotspot del teléfono. Reintentando…', 3000);
+        }, 12000);
+        c.on('open', () => { clearTimeout(retry); clearTimeout(watch); say(`Conectado (${code}) · sigue la pantalla del computador`); });
         c.on('data', onRemote);
         c.on('close', () => { if (c === conn) again('El computador se desconectó · reconectando…'); });
       }
-      peer.on('open', dial);
-      peer.on('disconnected', () => again('Sin conexión · reconectando…'));
-      peer.on('error', e => {
-        if (e.type === 'peer-unavailable') again(`Esperando al computador ${code}…`);
-        else $('when').textContent = `No se pudo enlazar (${e.type}). Prueben en la misma red (hotspot).`;
-      });
+      newPeer();
       run.iv = setInterval(remoteBuild, 400);
     }
 
