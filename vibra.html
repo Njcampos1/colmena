@@ -37,6 +37,7 @@
     .link input { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #0d0c0a; color: var(--ink); font: 600 20px/1 inherit; letter-spacing: .2em; text-align: center; }
     .link input:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
     .link button { padding: 12px 16px; border: 1px solid var(--honey); border-radius: 8px; background: transparent; color: var(--honey); font: 700 16px/1 inherit; cursor: pointer; }
+    button.test { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font: 600 15px/1 inherit; cursor: pointer; }
     button.go { margin-top: auto; padding: 16px; border: 0; border-radius: 12px; background: var(--honey); color: #000; font: 700 18px/1 inherit; cursor: pointer; }
     .hint { font-size: 13px; color: var(--ink-3); }
 
@@ -87,7 +88,10 @@
       <p class="hint">Tiempo para cerrar el panal antes de que empiece.</p>
     </fieldset>
 
-    <label class="check"><input type="checkbox" id="opt-sound" checked> Zumbido por el parlante</label>
+    <button class="test" id="test">Probar vibración y sonido</button>
+    <p class="hint" id="test-msg"></p>
+
+    <label class="check"><input type="checkbox" id="opt-sound" checked> Zumbido por el parlante (también al seguir al computador)</label>
     <label class="check"><input type="checkbox" id="opt-loop" checked> Repetir al terminar</label>
 
     <button class="go" id="go">Empezar</button>
@@ -143,9 +147,13 @@
 
     // ---------- patrones ----------
     // zumbido continuo con fuerza i (0–1) durante ms
-    function buzz(i, ms) {
+    // el motor de un teléfono no alcanza a girar con menos de ~30 ms: ese es el pulso mínimo
+    const pulse = i => {
       i = Math.max(0, Math.min(1, i));            // en modo real puede pasar de 100
-      const on = Math.round(10 + 30 * i), off = Math.round(10 + 140 * (1 - i));
+      return { on: Math.round(30 + 40 * i), off: Math.round(20 + 250 * (1 - i)) };
+    };
+    function buzz(i, ms) {
+      const { on, off } = pulse(i);
       const p = [];
       for (let used = 0; used + on <= ms; used += on + off) p.push(on, Math.min(off, ms - used - on));
       return p;
@@ -258,15 +266,14 @@
       if (!run) return;
       const RES = 5, WIN = 700, now = performance.now();
       const n = WIN / RES, bits = new Uint8Array(n);
-      const i = Math.max(0, Math.min(1, run.alive / 100));
-      const on = 10 + 30 * i, per = on + 10 + 140 * (1 - i);
+      const { on, off } = pulse(run.alive / 100), per = on + off;
       if (run.alive > 0.5) for (let k = 0; k < n; k++) bits[k] = (now + k * RES) % per < on ? 1 : 0;
       run.events = run.events.filter(e => e.at > now - 300);
       const set = (a, b, v) => { for (let k = Math.max(0, Math.floor((a - now) / RES)); k < Math.min(n, (b - now) / RES); k++) bits[k] = v; };
       const hits = [];
       run.events.forEach(e => {
-        if (e.k === 'death') { set(e.at + 90, e.at + 150, 0); hits.push([e.at, e.at + 90]); }
-        else [0, 70, 140].forEach(d => hits.push([e.at + d, e.at + d + 30]));
+        if (e.k === 'death') { set(e.at + 130, e.at + 220, 0); hits.push([e.at, e.at + 130]); }
+        else [0, 100, 200].forEach(d => hits.push([e.at + d, e.at + d + 45]));
       });
       hits.forEach(([a, b]) => set(a, b, 1));
       // de bits a patrón [on, off, on, …]
@@ -289,11 +296,14 @@
 
     function onRemote(msg) {
       if (!run) return;
+      const z = run.sound && window.Zumbido.on;
       if (msg.k === 'alive') {
         run.alive = msg.v;
         $('num').textContent = Math.round(msg.v);
+        if (z) Zumbido.setAlive(msg.v, 0.6);
       } else if (msg.k === 'death' || msg.k === 'birth') {
         run.events.push({ k: msg.k, at: performance.now() + (msg.at || 0) * 1000 });
+        if (z) Zumbido[msg.k](msg.at || 0);
       }
       remoteBuild();
     }
@@ -301,7 +311,9 @@
     async function follow() {
       const code = $('code').value.trim();
       if (!/^\d{4}$/.test(code)) { $('code').focus(); return; }
-      run = { remote: true, alive: 100, events: [], timeline: [], timers: [] };
+      run = { remote: true, alive: 100, events: [], timeline: [], timers: [], sound: $('opt-sound').checked };
+      // el audio se tiene que crear dentro del toque en "Conectar", antes de cualquier espera
+      if (run.sound) Zumbido.enable().then(() => run && Zumbido.setAlive(run.alive, 0.3));
       document.body.classList.add('running');
       keepAwake();
       if (canVibe) navigator.vibrate(80);
@@ -377,6 +389,20 @@
     $('go').addEventListener('click', start);
     try { $('code').value = localStorage.getItem('colmena-panal-codigo') || ''; } catch (e) {}
     $('link').addEventListener('click', follow);
+
+    // prueba rápida: un golpe, zumbido fuerte y toques sueltos, más un zumbido por el parlante
+    $('test').addEventListener('click', async () => {
+      const ok = canVibe && navigator.vibrate([300, 200].concat(buzz(1, 1200), [0, 300], buzz(0.03, 1500)));
+      $('test-msg').textContent = !canVibe
+        ? 'Este navegador no puede vibrar. Usen Chrome en Android (no el navegador de WhatsApp o Instagram).'
+        : ok === false
+          ? 'Chrome rechazó la vibración. Revisen que no esté en ahorro de batería ni en "No molestar".'
+          : 'Debería sentir: un golpe, vibración fuerte y luego toques sueltos. Si no se siente nada: activen la vibración en Ajustes › Sonido y vibración (también "vibración al tocar"), y quiten ahorro de batería y "No molestar".';
+      if ($('opt-sound').checked) {
+        await Zumbido.enable(); Zumbido.setAlive(100, 0.2); Zumbido.death(0.5);
+        setTimeout(() => { if (!run) Zumbido.disable(); }, 3000);
+      }
+    });
     $('code').addEventListener('keydown', ev => { if (ev.key === 'Enter') follow(); });
     $('run').addEventListener('click', stop);
   })();
