@@ -18,56 +18,63 @@
   Z.death = s => { send({ k: 'death', at: s || 0 }); return death.call(Z, s); };
   Z.birth = s => { send({ k: 'birth', at: s || 0 }); return birth.call(Z, s); };
 
+  // arriba a la derecha, discreto: "📱 9750 ●". El detalle aparece solo al hacer clic.
   function addUi() {
-    const actions = document.querySelector('.actions');
-    if (!actions) return;
-    const btn = document.createElement('button');
-    btn.className = 'btn ghost'; btn.id = 'btn-phone'; btn.title = 'Conectar el teléfono del panal';
-    btn.textContent = '📱';
-    actions.appendChild(btn);
-    const info = document.createElement('p');
-    info.className = 'nota'; info.id = 'phone-info'; info.hidden = true;
-    actions.after(info);
+    const bar = document.querySelector('.bar');
+    if (!bar) return;
+    const box = document.createElement('div');
+    box.className = 'enlace';
+    box.innerHTML = `<button class="enlace-btn" id="btn-phone" aria-expanded="false" title="Teléfono del panal">📱<span class="enlace-code"></span><i class="enlace-dot"></i></button>
+      <div class="enlace-pop" id="phone-info" hidden></div>`;
+    bar.appendChild(box);
+    const btn = box.querySelector('.enlace-btn'), info = box.querySelector('.enlace-pop');
+    const toggle = open => { info.hidden = !open; btn.setAttribute('aria-expanded', open); };
+    document.addEventListener('click', ev => { if (!box.contains(ev.target)) toggle(false); });
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') toggle(false); });
 
-    const show = html => { info.hidden = false; info.innerHTML = html; };
+    // estado: espera (ámbar) · ok (lleno) · error (rojo)
+    const show = (html, state = 'espera') => { info.innerHTML = html; box.dataset.state = state; };
 
     // el código se guarda: al recargar la página se reabre el mismo y el teléfono se reconecta solo
     const KEY = 'colmena-panal-codigo';
     const saved = (() => { try { return localStorage.getItem(KEY); } catch (e) { return null; } })();
     function open(code) {
-      if (!window.Peer) { show('No se pudo cargar PeerJS (¿sin internet?).'); return; }
+      if (!window.Peer) { show('No se pudo cargar PeerJS (¿sin internet?).', 'error'); return; }
       try { localStorage.setItem(KEY, code); } catch (e) {}
+      box.querySelector('.enlace-code').textContent = code;
+      const url = `${location.origin}${location.pathname.replace(/[^/]*$/, '')}vibra.html`;
+      const howTo = `En el teléfono abre <b>${url}</b>, toca “Conectar” y escribe <b class="enlace-num">${code}</b>.`;
       peer = new Peer('colmena-panal-' + code);
       show('Conectando…');
-      peer.on('open', () => show(`📱 En el teléfono abre <b>${location.origin}${location.pathname.replace(/[^/]*$/, '')}vibra.html</b>, elige “Seguir al computador” y escribe <b style="color:var(--honey)">${code}</b>.`));
+      peer.on('open', () => show(`Esperando al teléfono.<br>${howTo}`));
       peer.on('connection', c => {
-        show(`📱 Un teléfono está intentando conectarse (código ${code})…`);
+        show(`Un teléfono se está conectando…`);
         setTimeout(() => {
-          if (!c.open) show(`📱 El teléfono encontró este computador, pero la red bloquea la conexión directa. Pongan ambos en el mismo wifi o en el hotspot del teléfono. Código <b style="color:var(--honey)">${code}</b>.`);
+          if (!c.open) show(`El teléfono encontró este computador, pero la red bloquea la conexión directa. Pongan ambos en el mismo wifi o en el hotspot del teléfono.`, 'error');
         }, 12000);
         c.on('open', () => {
           conns.push(c);
           c.send({ k: 'alive', v: last });
-          show(`📱 Teléfono conectado (código ${code}). Vibra con lo que muestra la pantalla.`);
+          show(`Teléfono conectado: vibra con lo que muestra la pantalla.`, 'ok');
         });
         c.on('close', () => {
           conns = conns.filter(x => x !== c);
-          show(conns.length ? info.innerHTML : `📱 Teléfono desconectado. Código <b style="color:var(--honey)">${code}</b> sigue abierto.`);
+          if (!conns.length) show(`Teléfono desconectado. El código sigue abierto.<br>${howTo}`);
         });
       });
       peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });
       peer.on('error', e => {
         if (e.type === 'unavailable-id') {          // recién recargada: el servidor aún no suelta el código anterior
-          show(`Recuperando el código <b style="color:var(--honey)">${code}</b>…`);
+          show(`Recuperando el código…`);
           peer.destroy(); setTimeout(() => open(code), 2000);
           return;
         }
-        show(`No se pudo enlazar (${e.type}). Prueben con el computador y el teléfono en la misma red, por ejemplo el hotspot del teléfono.`);
+        show(`No se pudo enlazar (${e.type}). Prueben con el computador y el teléfono en la misma red, por ejemplo el hotspot del teléfono.`, 'error');
       });
     }
     btn.addEventListener('click', () => {
-      if (peer) { show(info.innerHTML); return; }
-      open(String(Math.floor(1000 + Math.random() * 9000)));
+      if (!peer) open(String(Math.floor(1000 + Math.random() * 9000)));
+      toggle(info.hidden);
     });
     if (saved) open(saved);
   }
