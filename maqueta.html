@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Panal de la maqueta</title>
+  <meta name="description" content="La tablet sobre el hexágono de cartón: 100 colmenas que se apagan trimestre a trimestre (EE.UU., 2015–2021). El teléfono dentro del panal vibra con ella.">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    html, body { height: 100%; }
+    body { user-select: none; -webkit-user-select: none; overflow: hidden; }
+
+    /* ---------- ajustes ---------- */
+    .m-setup { max-width: 560px; margin: 0 auto; padding: 24px 16px 32px; height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+    .m-setup h1 { margin: 0; font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; }
+    .m-setup p { margin: 0; color: var(--ink-2); }
+    .m-hint { font-size: 13px; color: var(--ink-3) !important; }
+    .m-box { border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 12px; }
+    .m-box h2 { margin: 0; font-size: 17px; }
+    .m-row { display: grid; gap: 6px; }
+    .m-row > span { font-size: 13px; color: var(--ink-3); }
+    .m-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+    .m-opts label { flex: 1 1 auto; }
+    .m-opts input { position: absolute; opacity: 0; pointer-events: none; }
+    .m-opts span { display: block; text-align: center; padding: 10px 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-2); font-size: 14px; line-height: 1.3; }
+    .m-opts input:checked + span { border-color: var(--honey); color: var(--ink); background: #1a1408; }
+    .m-opts input:focus-visible + span { outline: 2px solid var(--honey); outline-offset: 2px; }
+    .m-check { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--ink-2); }
+    .m-check input { width: 20px; height: 20px; accent-color: var(--honey); }
+    .m-go { padding: 14px; border: 0; border-radius: 12px; background: var(--honey); color: #000; font: 700 17px/1 inherit; cursor: pointer; }
+    .m-sec { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--ink); font: 600 15px/1 inherit; cursor: pointer; }
+    .m-link { display: flex; gap: 8px; }
+    .m-link input { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #0d0c0a; color: var(--ink); font: 600 20px/1 inherit; letter-spacing: .2em; text-align: center; }
+    .m-link input:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
+    .m-link button { padding: 12px 16px; border: 1px solid var(--honey); border-radius: 8px; background: transparent; color: var(--honey); font: 700 16px/1 inherit; cursor: pointer; }
+
+    /* ---------- panal a pantalla completa ---------- */
+    .m-run { position: fixed; inset: 0; display: none; background: var(--bg); }
+    body.running .m-run { display: block; }
+    body.running .m-setup { display: none; }
+    .m-comb { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: block; overflow: visible; }
+    .m-comb .hex { pointer-events: none; cursor: none; }
+    .m-frame { fill: none; stroke: var(--honey); stroke-width: 3; stroke-dasharray: 10 8; }
+    .m-info { position: absolute; left: max(16px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top)); display: grid; gap: 2px; pointer-events: none; }
+    .m-num { font-size: clamp(40px, 9vmin, 96px); font-weight: 750; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+    .m-unit { color: var(--ink-2); font-size: 14px; }
+    .m-when { color: var(--ink-3); font-size: 14px; font-variant-numeric: tabular-nums; margin-top: 6px; }
+    body.no-text .m-info { display: none; }
+    .m-status { position: absolute; left: 16px; right: 16px; bottom: max(14px, env(safe-area-inset-bottom)); margin: 0; text-align: center; font-size: 13px; color: var(--ink-3); pointer-events: none; }
+    .m-bar { position: absolute; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); }
+    .m-bar:empty { display: none; }
+
+    /* calibración: calzar el panal con el hexágono de cartón */
+    .m-cal { position: absolute; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(520px, calc(100vw - 32px)); background: #11100d; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
+    .m-cal[hidden] { display: none; }
+    .m-cal input[type=range] { width: 100%; accent-color: var(--honey); }
+    .m-cal .m-done { justify-self: end; padding: 10px 18px; border: 0; border-radius: 8px; background: var(--honey); color: #000; font: 700 15px/1 inherit; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main class="m-setup" id="setup">
+    <p class="brand">La colmena que se apaga</p>
+    <h1>Panal de la maqueta</h1>
+    <p>La tablet va sobre el hexágono de cartón y muestra las 100 colmenas. El teléfono va dentro y vibra con ella.</p>
+
+    <section class="m-box">
+      <h2>La tablet dirige</h2>
+      <p class="m-hint">No hace falta el computador. Al empezar aparece un código arriba a la derecha (📱). En el teléfono abre <b>vibra.html</b>, ve a “O seguir al computador” y escribe ese código.</p>
+      <div class="m-row"><span>Qué se muestra</span>
+        <div class="m-opts">
+          <label><input type="radio" name="show" value="dos" checked><span>Las dos<br>sin → lo que pasó</span></label>
+          <label><input type="radio" name="show" value="sin"><span>Sin apicultores<br>100 → 3</span></label>
+          <label><input type="radio" name="show" value="real"><span>Lo que pasó<br>con reposición</span></label>
+        </div>
+      </div>
+      <div class="m-row"><span>Segundos por trimestre</span>
+        <div class="m-opts">
+          <label><input type="radio" name="q" value="1000"><span>1 s</span></label>
+          <label><input type="radio" name="q" value="2000" checked><span>2 s</span></label>
+          <label><input type="radio" name="q" value="3000"><span>3 s</span></label>
+        </div>
+      </div>
+      <div class="m-row"><span>Empezar después de</span>
+        <div class="m-opts">
+          <label><input type="radio" name="delay" value="0"><span>ya</span></label>
+          <label><input type="radio" name="delay" value="5" checked><span>5 s</span></label>
+          <label><input type="radio" name="delay" value="10"><span>10 s</span></label>
+        </div>
+      </div>
+      <label class="m-check"><input type="checkbox" id="opt-loop" checked> Repetir al terminar</label>
+      <label class="m-check"><input type="checkbox" id="opt-sound"> Zumbido también por el parlante de la tablet</label>
+      <button class="m-go" id="go">Empezar</button>
+    </section>
+
+    <section class="m-box">
+      <h2>O seguir al computador</h2>
+      <p class="m-hint">En el computador abre la visualización y toca 📱. Escribe aquí el mismo código que el teléfono: la tablet apaga las mismas colmenas que la pantalla.</p>
+      <div class="m-link">
+        <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="código" aria-label="Código del computador">
+        <button id="link">Conectar</button>
+      </div>
+    </section>
+
+    <section class="m-box">
+      <h2>Calzar con el cartón</h2>
+      <label class="m-check"><input type="checkbox" id="opt-text" checked> Mostrar número y fecha en la esquina</label>
+      <button class="m-sec" id="cal">Ajustar tamaño y orientación</button>
+    </section>
+    <p class="m-hint">Toca la pantalla para volver aquí. Desactiva el bloqueo automático de pantalla si la tablet se apaga.</p>
+  </main>
+
+  <section class="m-run" id="run">
+    <svg class="m-comb" id="comb" aria-label="100 colmenas como celdas de un panal"></svg>
+    <div class="m-info" aria-live="polite">
+      <div class="m-num" id="num">100</div>
+      <div class="m-unit">colmenas vivas</div>
+      <div class="m-when" id="when"></div>
+    </div>
+    <p class="m-status" id="status"></p>
+    <div class="m-bar" id="bar-slot"></div>
+    <div class="m-cal" id="cal-panel" hidden>
+      <label class="m-row"><span>Tamaño del panal</span><input type="range" id="cal-size" min="40" max="110" step="1"></label>
+      <div class="m-row"><span>Orientación del hexágono</span>
+        <div class="m-opts">
+          <label><input type="radio" name="rot" value="0"><span>Lado arriba ⬣</span></label>
+          <label><input type="radio" name="rot" value="90"><span>Punta arriba ⬢</span></label>
+        </div>
+      </div>
+      <button class="m-done" id="cal-done">Listo</button>
+    </div>
+  </section>
+
+  <script src="js/vendor/d3.min.js"></script>
+  <script src="data/data.js"></script>
+  <script src="js/zumbido.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script>
+  /* Tablet sobre el hexágono de cartón de la maqueta.
+   *
+   * 100 celdas = 100 colmenas, con el mismo modelo y el mismo orden de muerte que js/main.js,
+   * así que la tablet apaga exactamente las mismas celdas que la pantalla del computador.
+   *
+   * Dos modos:
+   *   La tablet dirige        -> reproduce 2015–2021 sola y hace de "computador" para el teléfono
+   *                              (carga js/enlace.js, que reenvía Zumbido.setAlive/death/birth).
+   *   Seguir al computador    -> recibe lo mismo que el teléfono (alive, death, birth) y deduce
+   *                              el trimestre y el modo a partir del valor exacto de "alive".
+   * El protocolo es el mismo de enlace.js; un Arduino podría seguirlo igual que el teléfono.
+   */
+  (function () {
+    const D = window.DATA, rows = D.series.US, N = rows.length, CELLS = 100;
+    const $ = id => document.getElementById(id);
+    const MES = ['ene', 'abr', 'jul', 'oct'];
+    const pointLabel = t => t < N ? `${MES[D.periods[t].q - 1]} ${D.periods[t].year}` : 'jul 2021';
+    const modeLabel = m => m === 'sin' ? 'sin reposición' : 'lo que pasó';
+
+    // ---------- modelo (igual que js/main.js) ----------
+    const sin = [100];
+    rows.forEach((r, t) => sin.push(sin[t] * (1 - (r.missing || r.pct == null ? 0 : r.pct) / 100)));
+    const n0 = rows.find(r => r.n).n;
+    let real = rows.map(r => (r.n ? (r.n / n0) * 100 : null));
+    real = real.map((v, i) => v ?? (((real[i - 1] ?? real[i + 1]) + (real[i + 1] ?? real[i - 1])) / 2));
+    real.push(real[N - 1]);
+    const series = { sin, real };
+    const aliveAt = (t, mode) => series[mode][t];
+    const rank = d3.shuffler(d3.randomLcg(0.42))(d3.range(CELLS));   // misma semilla que main.js
+    function cellState(i, t, mode) {
+      const r = rank[i], A = Math.round(sin[t]);
+      if (mode === 'sin') return r < A ? 'viva' : 'muerta';
+      const R = Math.min(CELLS, Math.round(real[t]));
+      if (R <= A) return r < R ? 'viva' : 'muerta';
+      if (r < A) return 'viva';
+      return r >= CELLS - (R - A) ? 'repuesta' : 'muerta';
+    }
+
+    // ---------- geometría: 100 celdas formando un hexágono ----------
+    // Con celdas hexagonales no existe un hexágono regular de 100 (son 91 o 127). El más parejo es uno
+    // de 102 celdas con lados 7-6-6, al que se le quitan dos esquinas opuestas: bordes rectos y simetría central.
+    const S = 24, SQ3 = Math.sqrt(3);
+    const slots = [];
+    for (let q = -8; q <= 2; q++) for (let r = -4; r <= 7; r++) {
+      const s = -q - r;
+      if (s < -4 || s > 7 || (q === -3 && (r === -4 || r === 7))) continue;
+      slots.push([S * SQ3 * (q + r / 2), S * 1.5 * r]);
+    }
+    const cx = d3.mean(slots, p => p[0]), cy = d3.mean(slots, p => p[1]);
+    // la celda i del computador va al puesto i, del centro hacia afuera
+    const centers = slots.map(([x, y]) => [x - cx, y - cy])
+      .sort((a, b) => Math.hypot(...a) - Math.hypot(...b) || Math.atan2(a[1], a[0]) - Math.atan2(b[1], b[0]));
+    if (centers.length !== CELLS) console.warn('panal: se esperaban 100 celdas y hay', centers.length);
+    const cellPath = 'M' + d3.range(6).map(k => { const a = Math.PI / 180 * (60 * k - 30); return [(S - 1.5) * Math.cos(a), (S - 1.5) * Math.sin(a)]; }).join('L') + 'Z';
+    // hexágono que envuelve todo el panal (lado arriba): es el que se calza con el cartón
+    const normals = d3.range(6).map(k => { const a = Math.PI / 180 * (60 * k + 30); return [Math.cos(a), Math.sin(a)]; });
+    let apothem = 0;
+    centers.forEach(([x, y]) => d3.range(6).forEach(k => {
+      const a = Math.PI / 180 * (60 * k - 30), vx = x + S * Math.cos(a), vy = y + S * Math.sin(a);
+      normals.forEach(([nx, ny]) => { apothem = Math.max(apothem, vx * nx + vy * ny); });
+    }));
+    const RF = apothem * 2 / SQ3;                          // radio (centro a esquina) del contorno
+    const framePts = d3.range(6).map(k => { const a = Math.PI / 180 * 60 * k; return [RF * Math.cos(a), RF * Math.sin(a)]; });
+
+    const svg = d3.select('#comb').attr('viewBox', `${-RF} ${-RF} ${2 * RF} ${2 * RF}`);
+    const g = svg.append('g');
+    g.append('polygon').attr('class', 'm-frame').attr('points', framePts.join(' ')).style('display', 'none');
+    const nodes = g.selectAll('path.hex').data(d3.range(CELLS)).join('path')
+      .attr('d', cellPath).attr('class', 'hex viva')
+      .attr('transform', i => `translate(${centers[i][0].toFixed(2)},${centers[i][1].toFixed(2)})`)
+      .style('animation-delay', () => `${-Math.random() * 1.6}s`).nodes();
+    const frame = g.select('.m-frame');
+
+    // ---------- ajustes guardados (tamaño y orientación) ----------
+    const KEY = 'colmena-maqueta-ajustes';
+    let cfg = { size: 92, rot: 0, text: true };
+    try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} };
+    function layout() {
+      // tamaño = ancho de esquina a esquina del hexágono, en % del lado corto de la pantalla
+      const px = Math.min(innerWidth, innerHeight) * cfg.size / 100;
+      svg.attr('width', px).attr('height', px);
+      g.attr('transform', cfg.rot ? `rotate(${cfg.rot})` : null);
+      document.body.classList.toggle('no-text', !cfg.text);
+    }
+    addEventListener('resize', layout);
+    $('opt-text').checked = cfg.text;
+    $('opt-text').addEventListener('change', e => { cfg.text = e.target.checked; save(); layout(); });
+    layout();
+
+    // ---------- pintar ----------
+    const shown = { t: 0, mode: 'sin' };                   // lo que muestra la tablet ahora (al cargar, todas vivas)
+    function setCell(i, cls) { nodes[i].setAttribute('class', 'hex ' + cls); }
+    function flashDie(i) { setCell(i, 'muriendo'); setTimeout(() => setCell(i, 'muerta'), 140); }
+    function paintAll(t, mode) { shown.t = t; shown.mode = mode; for (let i = 0; i < CELLS; i++) setCell(i, cellState(i, t, mode)); }
+    function info(alive, t, mode) {
+      $('num').textContent = alive == null ? '–' : Math.round(alive);
+      $('when').textContent = t == null ? '' : `${pointLabel(t)} · ${modeLabel(mode)}`;
+    }
+    const status = (msg, fadeMs) => {
+      $('status').textContent = msg;
+      clearTimeout(status.tm);
+      if (fadeMs) status.tm = setTimeout(() => { $('status').textContent = ''; }, fadeMs);
+    };
+
+    // ---------- pantalla completa y pantalla encendida ----------
+    let lock = null;
+    async function keepAwake() { try { lock = await navigator.wakeLock?.request('screen'); } catch (e) { lock = null; } }
+    document.addEventListener('visibilitychange', () => { if (run && document.visibilityState === 'visible') keepAwake(); });
+    async function enter() {
+      document.body.classList.add('running');
+      try { await document.documentElement.requestFullscreen?.(); } catch (e) {}
+      keepAwake(); layout();
+    }
+
+    let run = null;    // { kind: 'host'|'follow'|'cal', timers: [] , ... }
+    const later = (fn, ms) => { const me = run; run.timers.push(setTimeout(() => { if (run === me) fn(); }, ms)); };
+
+    function stop() {
+      if (!run) return;
+      run.timers.forEach(clearTimeout);
+      if (run.kind === 'host') Zumbido.setAlive(0, 0.4);  // el teléfono queda en silencio; el código sigue abierto
+      if (run.kind === 'follow') { clearTimeout(run.pending); try { run.peer?.destroy(); } catch (e) {} }
+      run = null;
+      if (Zumbido.on) Zumbido.disable();
+      try { lock?.release(); } catch (e) {}
+      if (document.fullscreenElement) document.exitFullscreen?.();
+      document.body.classList.remove('running');
+      $('cal-panel').hidden = true; frame.style('display', 'none');
+      status('');
+    }
+    $('run').addEventListener('click', ev => {
+      if (ev.target.closest('.m-bar, .m-cal, .enlace')) return;
+      stop();
+    });
+
+    // ======================================================
+    // LA TABLET DIRIGE
+    // ======================================================
+    // enlace.js se carga solo aquí: abre el código para el teléfono y reenvía cada llamada a Zumbido
+    function loadEnlace() {
+      return new Promise(res => {
+        if (window.__enlace) return res();
+        $('bar-slot').classList.add('bar');
+        const s = document.createElement('script');
+        s.src = 'js/enlace.js';
+        s.onload = () => {
+          window.__enlace = true;
+          // primera vez en esta tablet: abrir un código de inmediato y mostrar las instrucciones
+          const btn = $('btn-phone');
+          if (btn && !btn.querySelector('.enlace-code').textContent) btn.click();
+          res();
+        };
+        s.onerror = res;
+        document.head.appendChild(s);
+      });
+    }
+
+    async function host() {
+      const val = n => document.querySelector(`input[name=${n}]:checked`).value;
+      const opt = { show: val('show'), Q: +val('q'), delay: +val('delay'), loop: $('opt-loop').checked, sound: $('opt-sound').checked };
+      run = { kind: 'host', timers: [], opt };
+      if (opt.sound) await Zumbido.enable();
+      await enter();
+      await loadEnlace();
+      const first = opt.show === 'real' ? 'real' : 'sin';
+      paintAll(0, first); info(100, 0, first);
+      Zumbido.setAlive(100, 0.8);
+      let s = opt.delay;
+      const tick = () => {
+        if (s > 0) { status(`Empieza en ${s--}…`); later(tick, 1000); return; }
+        status('');
+        step();
+      };
+      tick();
+    }
+
+    // un trimestre: las celdas que cambian lo hacen en un instante al azar, con su zumbido (como main.js)
+    function step() {
+      const { Q } = run.opt, mode = shown.mode, t0 = shown.t, t1 = t0 + 1;
+      if (t0 >= N) return ending();
+      for (let i = 0; i < CELLS; i++) {
+        const a = cellState(i, t0, mode), b = cellState(i, t1, mode);
+        if (a === b) continue;
+        const delay = Math.random() * Q * 0.85;
+        if (b === 'muerta') { Zumbido.death(delay / 1000); later(() => flashDie(i), delay); }
+        else { Zumbido.birth(delay / 1000); later(() => setCell(i, b), delay); }
+      }
+      later(() => {
+        shown.t = t1;
+        info(aliveAt(t1, mode), t1, mode);
+        Zumbido.setAlive(aliveAt(t1, mode), 0.9);
+        step();
+      }, Q);
+    }
+
+    function ending() {
+      const { show, loop } = run.opt;
+      if (show === 'dos' && shown.mode === 'sin') { later(reveal, 3500); return; }
+      if (!loop) return;
+      later(() => {
+        const first = show === 'real' ? 'real' : 'sin';
+        paintAll(0, first); info(100, 0, first);           // las celdas vuelven con su transición suave
+        Zumbido.setAlive(100, 1.5);
+        later(step, 2500);
+      }, 6000);
+    }
+
+    // los apicultores reponen: las celdas vuelven una a una, con zumbidos que suben (como main.js)
+    function reveal() {
+      const t = shown.t, DUR = 2600;
+      const changed = d3.shuffle(d3.range(CELLS).filter(i => cellState(i, t, 'sin') !== cellState(i, t, 'real')));
+      changed.forEach((i, k) => {
+        const delay = (k / Math.max(1, changed.length)) * DUR;
+        Zumbido.birth(delay / 1000);
+        later(() => setCell(i, cellState(i, t, 'real')), delay);
+      });
+      shown.mode = 'real';
+      Zumbido.setAlive(aliveAt(t, 'real'), DUR / 1000);
+      const from = aliveAt(t, 'sin'), to = aliveAt(t, 'real'), t0 = performance.now(), me = run;
+      (function count() {
+        if (run !== me) return;
+        const u = Math.min(1, (performance.now() - t0) / DUR);
+        info(from + (to - from) * u, t, 'real');
+        if (u < 1) requestAnimationFrame(count);
+      })();
+      later(ending, DUR);
+    }
+
+    // ======================================================
+    // SEGUIR AL COMPUTADOR
+    // ======================================================
+    // De "alive" se deduce trimestre y modo: main.js siempre manda el valor exacto del modelo.
+    // Si un valor se repite (trimestre sin dato), gana el más cercano a lo que ya se muestra.
+    function infer(v) {
+      let best = null, cost = Infinity, near = null, gap = Infinity;
+      ['sin', 'real'].forEach(mode => series[mode].forEach((x, t) => {
+        const c = (mode === shown.mode ? 0 : 100) + Math.abs(t - shown.t);
+        if (Math.abs(x - v) < 1e-9 && c < cost) { cost = c; best = { t, mode }; }
+        if (mode === shown.mode && Math.abs(x - v) < gap) { gap = Math.abs(x - v); near = { t, mode }; }
+      }));
+      return best || near;
+    }
+
+    // Llegan en ráfagas y el orden dice qué pasó:
+    //   reproducción -> alive(t) y enseguida las muertes de t -> t+1
+    //   revelación   -> los nacimientos y después alive(real en t)
+    //   curva        -> solo alive (se pinta de una vez, con transición suave)
+    // Cada muerte o nacimiento se asigna a una celda que cambia, a la misma hora que en el computador.
+    function onBurst(batch) {
+      const firstEv = batch.findIndex(m => m.k !== 'alive');
+      const evs = batch.filter(m => m.k !== 'alive');
+      const before = batch.filter((m, j) => m.k === 'alive' && (firstEv < 0 || j < firstEv)).pop();
+      const after = batch.filter((m, j) => m.k === 'alive' && firstEv >= 0 && j > firstEv).pop();
+      if (before) {
+        const s = infer(before.v);
+        if (s && (s.t !== shown.t || s.mode !== shown.mode)) paintAll(s.t, s.mode);
+      }
+      if (evs.length) {
+        const times = k => evs.filter(m => m.k === k).map(m => m.at).sort((a, b) => a - b);
+        const deaths = times('death'), births = times('birth');
+        const now = d3.range(CELLS).map(i => nodes[i].getAttribute('class').replace('hex ', '').replace('muriendo', 'muerta'));
+        const diff = to => {
+          const dying = [], coming = [];
+          for (let i = 0; i < CELLS; i++) { const b = cellState(i, to.t, to.mode); if (now[i] !== b) (b === 'muerta' ? dying : coming).push([i, b]); }
+          return { to, dying, coming, ok: dying.length === deaths.length && coming.length === births.length };
+        };
+        // sin "alive" después: paso al trimestre siguiente. Con 100 vivas los dos modos se ven iguales,
+        // así que se elige el modo cuyas muertes y nacimientos calzan con la ráfaga.
+        const nx = Math.min(N, shown.t + 1), other = shown.mode === 'sin' ? 'real' : 'sin';
+        const tries = after && infer(after.v) ? [diff(infer(after.v))] : [diff({ t: nx, mode: shown.mode }), diff({ t: nx, mode: other })];
+        const { to, dying, coming } = tries.find(x => x.ok) || tries[0];
+        const me = run;
+        const place = (list, ts, fn) => d3.shuffle(list).forEach(([i, b], k) => {
+          const at = ts.length ? ts[Math.min(k, ts.length - 1)] : performance.now();
+          setTimeout(() => { if (run === me) fn(i, b); }, at - performance.now());
+        });
+        place(dying, deaths, i => flashDie(i));
+        place(coming, births, (i, b) => setCell(i, b));
+        shown.t = to.t; shown.mode = to.mode;
+      }
+      const last = after || before;
+      if (last) info(last.v, shown.t, shown.mode);
+    }
+
+    function follow() {
+      const code = $('code').value.trim();
+      if (!/^\d{4}$/.test(code)) { $('code').focus(); return; }
+      try { localStorage.setItem('colmena-maqueta-codigo', code); } catch (e) {}
+      run = { kind: 'follow', timers: [], queue: [], pending: null };
+      shown.t = -1;                                        // el primer "alive" repinta todo
+      enter();
+      info(null, null); status('Conectando al computador…');
+      if (!window.Peer) { status('No se pudo cargar PeerJS (¿sin internet?)'); return; }
+      const me = run;
+      const say = (msg, fade) => { if (run === me) status(msg, fade); };
+      let peer = null, conn = null, retry = null, watch = null;
+      const again = (msg, ms = 2000) => { if (run !== me) return; say(msg); clearTimeout(retry); retry = setTimeout(dial, ms); };
+      const onData = msg => {
+        if (run !== me) return;
+        if (msg.k !== 'alive') msg.at = performance.now() + (msg.at || 0) * 1000;
+        me.queue.push(msg);
+        if (!me.pending) me.pending = setTimeout(() => { me.pending = null; const b = me.queue; me.queue = []; if (run === me) onBurst(b); }, 40);
+      };
+      function newPeer() {
+        try { peer?.destroy(); } catch (e) {}
+        peer = me.peer = new Peer();
+        say('1/2 · Buscando el servidor de enlace…');
+        clearTimeout(watch);
+        watch = setTimeout(() => {
+          if (run !== me || peer.open) return;
+          say('1/2 · No llega al servidor de enlace. ¿Internet en la tablet? Reintentando…');
+          setTimeout(newPeer, 1500);
+        }, 10000);
+        peer.on('open', dial);
+        peer.on('disconnected', () => { if (!peer.destroyed) again('Sin conexión al servidor · reconectando…'); });
+        peer.on('error', e => {
+          if (e.type === 'peer-unavailable') again(`2/2 · No hay computador abierto con el código ${code}. Reintentando…`);
+          else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error') again(`1/2 · Error de red (${e.type}). Reintentando…`, 4000);
+          else say(`No se pudo enlazar (${e.type}).`);
+        });
+      }
+      function dial() {
+        if (run !== me) return;
+        if (peer.disconnected) { peer.reconnect(); return; }
+        say(`2/2 · Servidor OK. Conectando con el computador ${code}…`);
+        try { conn?.close(); } catch (e) {}
+        conn = peer.connect('colmena-panal-' + code, { reliable: true });
+        const c = conn;
+        clearTimeout(watch);
+        watch = setTimeout(() => {
+          if (run !== me || c !== conn || c.open) return;
+          again('2/2 · El computador está, pero la red bloquea la conexión directa. Pongan ambos en el mismo wifi. Reintentando…', 3000);
+        }, 12000);
+        c.on('open', () => { clearTimeout(retry); clearTimeout(watch); say(`Conectado (${code}) · sigue la pantalla del computador`, 4000); });
+        c.on('data', onData);
+        c.on('close', () => { if (c === conn) again('El computador se desconectó · reconectando…'); });
+      }
+      newPeer();
+    }
+
+    // ======================================================
+    // CALIBRACIÓN
+    // ======================================================
+    function calibrate() {
+      run = { kind: 'cal', timers: [] };
+      enter();
+      paintAll(N, 'real'); info(aliveAt(N, 'real'), N, 'real');
+      frame.style('display', null);
+      $('cal-panel').hidden = false;
+      $('cal-size').value = cfg.size;
+      document.querySelector(`input[name=rot][value="${cfg.rot}"]`).checked = true;
+      status('');
+    }
+    $('cal-size').addEventListener('input', e => { cfg.size = +e.target.value; save(); layout(); });
+    document.querySelectorAll('input[name=rot]').forEach(r => r.addEventListener('change', e => { cfg.rot = +e.target.value; save(); layout(); }));
+    $('cal-done').addEventListener('click', stop);
+
+    $('go').addEventListener('click', host);
+    $('link').addEventListener('click', follow);
+    $('code').addEventListener('keydown', ev => { if (ev.key === 'Enter') follow(); });
+    $('cal').addEventListener('click', calibrate);
+    try { $('code').value = localStorage.getItem('colmena-maqueta-codigo') || ''; } catch (e) {}
+  })();
+  </script>
+</body>
+</html>
