@@ -3,11 +3,10 @@
  * Sin reposición: se apagan hasta quedar ~3.  Real: los apicultores las reponen.
  */
 (function () {
-  const D = window.DATA;
+  const D = window.DATA, M = window.Modelo;   // modelo compartido con la tablet (js/modelo.js)
   const Q = D.periods;                         // 26 trimestres
-  const N = Q.length;                          // puntos 0..26 = inicio de cada trimestre (+ final)
-  const MES = ['ene', 'abr', 'jul', 'oct'];
-  const pointLabel = t => t < N ? `${MES[Q[t].q - 1]} ${Q[t].year}` : 'jul 2021';
+  const N = M.N;                               // puntos 0..26 = inicio de cada trimestre (+ final)
+  const pointLabel = M.pointLabel;
   const qLabel = q => Q[q].label;
   const fmt1 = v => d3.format('.1f')(v).replace('.', ',');
   const stressLabel = Object.fromEntries(D.stressors.map(s => [s.key, s.label]));
@@ -17,31 +16,8 @@
   const S = { t: 0, mode: 'sin', revealed: false, playing: false, series: null };
 
   // ---------- modelo ----------
-  function build() {
-    const rows = D.series.US;
-    const sin = [100];
-    rows.forEach((r, t) => sin.push(sin[t] * (1 - (r.missing || r.pct == null ? 0 : r.pct) / 100)));
-    const n0 = rows.find(r => r.n)?.n;
-    let real = rows.map(r => (r.n ? (r.n / n0) * 100 : null));
-    real = real.map((v, i) => v ?? (((real[i - 1] ?? real[i + 1]) + (real[i + 1] ?? real[i - 1])) / 2));
-    real.push(real[N - 1]);                       // el último punto repite el último conteo publicado
-    const valid = rows.filter(r => !r.missing && r.pct != null);
-    return { rows, sin, real, meanPct: d3.mean(valid, r => r.pct) };
-  }
-
-  // orden (reproducible) en que mueren las celdas
-  const CELLS = 100;
-  const rank = d3.shuffler(d3.randomLcg(0.42))(d3.range(CELLS));
-
-  function cellState(i, t, mode) {
-    const r = rank[i];
-    const A = Math.round(S.series.sin[t]);
-    if (mode === 'sin') return r < A ? 'viva' : 'muerta';
-    const R = Math.min(CELLS, Math.round(S.series.real[t]));
-    if (R <= A) return r < R ? 'viva' : 'muerta';
-    if (r < A) return 'viva';
-    return r >= CELLS - (R - A) ? 'repuesta' : 'muerta';
-  }
+  const build = () => ({ rows: M.rows, sin: M.sin, real: M.real, meanPct: M.meanPct });
+  const CELLS = M.CELLS, rank = M.rank, cellState = M.cellState;
   function deathQuarter(i) {
     const r = rank[i], s = S.series.sin;
     for (let q = 0; q < N; q++) if (Math.round(s[q]) > r && Math.round(s[q + 1]) <= r) return q;
@@ -120,6 +96,8 @@
     const x = d3.scaleLinear([0, N], [m.l, W - m.r]);
     const ymax = Math.max(100, S.revealed ? d3.max(S.series.real) : 0) * 1.05;
     const y = d3.scaleLinear([0, ymax], [H - m.b, m.t]);
+    // el deslizador ocupa el mismo tramo que el eje x (el centro del pulgar, de 36 px, cae en x(0) … x(N))
+    Object.assign($('scrub-wrap').style, { paddingLeft: `${(m.l - 18) / W * 100}%`, paddingRight: `${(m.r - 18) / W * 100}%` });
     el.innerHTML = '';
     const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`);
     [0, 50, 100].forEach(v => {
@@ -158,13 +136,13 @@
     let dragging = false;
     const toT = ev => Math.max(0, Math.min(N, Math.round(x.invert(d3.pointer(ev)[0]))));
     svg.append('rect').attr('class', 'hit').attr('x', m.l).attr('y', 0).attr('width', W - m.r - m.l).attr('height', H)
-      .on('pointerdown', ev => { dragging = true; ev.target.setPointerCapture(ev.pointerId); stopPlay(); setT(toT(ev)); })
+      .on('pointerdown', ev => { dragging = true; ev.target.setPointerCapture(ev.pointerId); scrubTo(toT(ev)); })
       .on('pointermove', ev => {
         const q = Math.max(0, Math.min(N - 1, Math.floor(x.invert(d3.pointer(ev)[0]))));
         showTip(ev, quarterHtml(q));
-        if (dragging) setT(toT(ev));
+        if (dragging) scrubTo(toT(ev));
       })
-      .on('pointerup pointercancel', () => (dragging = false))
+      .on('pointerup pointercancel', ev => { dragging = false; if (ev.pointerType !== 'mouse') hideTip(); })
       .on('pointerleave', () => { hideTip(); });
     curve = { x, y, head };
     moveHead();
@@ -174,6 +152,14 @@
     const v = aliveAt(S.t, S.mode);
     head.select('line').attr('x1', x(S.t)).attr('x2', x(S.t));
     head.select('circle').attr('cx', x(S.t)).attr('cy', y(v));
+    const sl = $('scrub');
+    sl.value = S.t;
+    sl.setAttribute('aria-valuetext', `${pointLabel(S.t)}: ${Math.round(v)} colmenas vivas`);
+    emitState();
+  }
+  // js/enlace.js reenvía el estado a la tablet, para que su panal y su deslizador sigan a esta pantalla
+  function emitState() {
+    document.dispatchEvent(new CustomEvent('colmena:estado', { detail: { t: S.t, mode: S.mode, playing: S.playing } }));
   }
 
   // ======================================================
@@ -226,6 +212,34 @@
   }
   function setT(t) { S.t = t; render(); }
 
+  // mover el tiempo a mano (deslizador, curva o flechas; mouse o dedo).
+  // Hacia adelante, cada trimestre cruzado manda sus muertes y reposiciones al zumbido y,
+  // por js/enlace.js, al teléfono del panal: el golpe se siente al pasar por ese trimestre.
+  // Hacia atrás solo cambia la intensidad (no se "desmueren" colmenas).
+  const MAX_HITS = 8;    // tope por movimiento: un arrastre rápido no satura el motor ni el parlante
+  function scrubTo(t) {
+    t = Math.max(0, Math.min(N, t));
+    if (S.playing) stopPlay();
+    if (t === S.t) return;
+    if (t > S.t) {
+      const nodes = hexSel.nodes(), deaths = [], births = [];
+      for (let q = S.t; q < t; q++) d3.range(CELLS).forEach(i => {
+        const a = cellState(i, q, S.mode), b = cellState(i, q + 1, S.mode);
+        if (a === b) return;
+        (b === 'muerta' ? deaths : births).push(i);
+      });
+      const span = Math.min(0.5, 0.12 * (t - S.t));      // segundos en que se reparten los golpes
+      deaths.slice(0, MAX_HITS).forEach((i, k, arr) => Zumbido.death((k / arr.length) * span));
+      births.slice(0, Math.ceil(MAX_HITS / 2)).forEach((i, k, arr) => Zumbido.birth((k / arr.length) * span));
+      setT(t);
+      deaths.forEach(i => { nodes[i].setAttribute('class', 'hex muriendo'); setTimeout(() => nodes[i].setAttribute('class', 'hex ' + cellState(i, S.t, S.mode)), 160); });
+      return;
+    }
+    setT(t);
+  }
+  $('scrub').max = N;
+  $('scrub').addEventListener('input', ev => scrubTo(+ev.target.value));
+
   // el mensaje va arriba, desde el primer segundo: cuántas quedarían y por qué no se nota
   function storyText() {
     const s = S.series, endReal = Math.round(s.real[N]), endSin = Math.round(s.sin[N]);
@@ -244,10 +258,12 @@
   // ---------- reproducción ----------
   const STEP = 400;  // ms por trimestre (~10 s en total)
   let timer = null;
-  function stopPlay() { clearTimeout(timer); timer = null; S.playing = false; $('btn-play').textContent = S.t > 0 && S.t < N ? '▶ Continuar' : '▶ Reproducir 2015–2021'; }
-  async function play() {
+  function stopPlay() { clearTimeout(timer); timer = null; S.playing = false; $('btn-play').textContent = S.t > 0 && S.t < N ? '▶ Continuar' : '▶ Reproducir 2015–2021'; emitState(); }
+  // el sonido no se espera: si la orden viene de la tablet y nadie ha tocado el computador,
+  // el navegador no deja sonar audio y esperar dejaría la reproducción detenida
+  function play() {
     if (S.playing) return stopPlay();
-    await ensureSound();
+    ensureSound();
     if (S.t >= N) S.t = 0;
     S.playing = true; $('btn-play').textContent = '❚❚ Pausa';
     render();
@@ -284,9 +300,9 @@
   }
 
   // revelación: los apicultores reponen (a la fecha actual, con zumbidos que suben)
-  async function reveal() {
+  function reveal() {
     stopPlay();
-    await ensureSound();
+    ensureSound();
     if (S.mode === 'real') { // volver a ver sin reposición
       S.mode = 'sin'; $('btn-real').textContent = 'Ver lo que realmente pasó';
       document.querySelector('.key .rep').hidden = true;
@@ -418,6 +434,7 @@
 
   // intro automática: el panal cubre la pantalla y se apaga solo (100 → 3 en ~3 s),
   // aparece el mensaje y el panal se encoge a su lugar. Un clic salta al final.
+  let skipIntro = null;    // si la tablet manda una orden durante la intro, la intro se salta
   function startIntro() {
     const panal = $('panal'), svg = panal.querySelector('svg'), intro = $('intro');
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -462,10 +479,12 @@
         svg.removeAttribute('preserveAspectRatio');
         document.body.classList.remove('intro-open');
         intro.remove();
+        skipIntro = null;
         $('btn-real').focus({ preventScroll: true });
       }, 950);
     }
     const next = () => (finished ? leave() : finish());
+    skipIntro = () => { skipIntro = null; finish(); leave(); };
 
     if (reduce) finish();
     else {
@@ -486,10 +505,21 @@
     intro.focus();
   }
   $('btn-real').addEventListener('click', reveal);
+
+  // órdenes de la tablet (llegan por js/enlace.js): mover el tiempo, cambiar de modo, reproducir
+  document.addEventListener('colmena:orden', ev => {
+    const o = ev.detail;
+    if (o.k !== 'estado') skipIntro?.();
+    if (o.k === 'seek') scrubTo(Math.round(+o.t));
+    else if (o.k === 'mode' && o.mode !== S.mode) reveal();
+    else if (o.k === 'play') play();
+    else if (o.k === 'estado') emitState();
+  });
   addEventListener('keydown', ev => {
     if ($('intro')) return;
-    if (ev.key === 'ArrowRight') { stopPlay(); setT(Math.min(N, S.t + 1)); }
-    if (ev.key === 'ArrowLeft') { stopPlay(); setT(Math.max(0, S.t - 1)); }
+    if (ev.target.id === 'scrub') return;      // el deslizador ya mueve el tiempo con sus flechas
+    if (ev.key === 'ArrowRight') scrubTo(S.t + 1);
+    if (ev.key === 'ArrowLeft') scrubTo(S.t - 1);
   });
 
   // ---------- inicio ----------
