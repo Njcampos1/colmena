@@ -1,22 +1,28 @@
-/* Enlace computador -> teléfono (PeerJS, WebRTC).
+/* Enlace computador -> teléfono y tablet (PeerJS, WebRTC).
  *
- * El computador muestra un código de 4 dígitos; el teléfono (vibra.html) lo escribe y se conecta.
+ * El computador muestra un código de 4 dígitos; el teléfono (vibra.html) y la tablet (tablet.html)
+ * lo escriben y se conectan.
  * El código queda guardado: al recargar se reabre solo y el teléfono se reconecta.
  * No se toca main.js: se envuelve Zumbido, que ya recibe todo lo que pasa en la visualización
  *   setAlive(n) -> fuerza del zumbido en el teléfono
  *   death(s)    -> golpe en el teléfono (muere una colmena)
  *   birth(s)    -> toques cortos (un apicultor la repone)
+ * Además, con la tablet:
+ *   computador -> tablet:  { k: 'state', t, mode, playing }  (main.js lo avisa con el evento colmena:estado)
+ *   tablet -> computador:  { k: 'seek', t } · { k: 'mode', mode } · { k: 'play' }  (main.js las recibe como colmena:orden)
+ * El teléfono ignora 'state'.
  * Debe cargarse después de js/zumbido.js y antes de js/main.js.
  */
 (function () {
   const Z = window.Zumbido;
-  let peer = null, conns = [], last = 100;
+  let peer = null, conns = [], last = 100, state = null;
 
   const send = msg => conns.forEach(c => c.open && c.send(msg));
   const { setAlive, death, birth } = Z;
   Z.setAlive = (n, fade) => { last = n; send({ k: 'alive', v: n }); return setAlive.call(Z, n, fade); };
   Z.death = s => { send({ k: 'death', at: s || 0 }); return death.call(Z, s); };
   Z.birth = s => { send({ k: 'birth', at: s || 0 }); return birth.call(Z, s); };
+  document.addEventListener('colmena:estado', ev => { state = { k: 'state', ...ev.detail }; send(state); });
 
   // arriba a la derecha, discreto: "📱 9750 ●". El detalle aparece solo al hacer clic.
   function addUi() {
@@ -43,23 +49,36 @@
       try { localStorage.setItem(KEY, code); } catch (e) {}
       box.querySelector('.enlace-code').textContent = code;
       const url = `${location.origin}${location.pathname.replace(/[^/]*$/, '')}vibra.html`;
-      const howTo = `En el teléfono abre <b>${url}</b>, toca “Conectar” y escribe <b class="enlace-num">${code}</b>.`;
+      const base = `${location.origin}${location.pathname.replace(/[^/]*$/, '')}`;
+      const howTo = `En el teléfono abre <b>${url}</b> y en la tablet <b>${base}tablet.html</b>; escribe <b class="enlace-num">${code}</b> y toca “Conectar”.`;
+      const estado = () => {
+        const nT = conns.filter(c => c.metadata?.rol === 'tablet').length, nP = conns.length - nT;
+        return [nP && `Teléfono conectado: vibra con lo que muestra la pantalla.`, nT && `Tablet conectada: su deslizador mueve esta pantalla.`]
+          .filter(Boolean).join('<br>');
+      };
       peer = new Peer('colmena-panal-' + code);
       show('Conectando…');
       peer.on('open', () => show(`Esperando al teléfono.<br>${howTo}`));
       peer.on('connection', c => {
-        show(`Un teléfono se está conectando…`);
+        const quien = c.metadata?.rol === 'tablet' ? 'tablet' : 'teléfono';
+        show(`Un${quien === 'tablet' ? 'a' : ''} ${quien} se está conectando…`);
         setTimeout(() => {
           if (!c.open) show(`El teléfono encontró este computador, pero la red bloquea la conexión directa. Pongan ambos en el mismo wifi o en el hotspot del teléfono.`, 'error');
         }, 12000);
         c.on('open', () => {
           conns.push(c);
           c.send({ k: 'alive', v: last });
-          show(`Teléfono conectado: vibra con lo que muestra la pantalla.`, 'ok');
+          if (state) c.send(state);
+          show(estado(), 'ok');
+        });
+        c.on('data', msg => {
+          if (msg && (msg.k === 'seek' || msg.k === 'mode' || msg.k === 'play' || msg.k === 'estado'))
+            document.dispatchEvent(new CustomEvent('colmena:orden', { detail: msg }));
         });
         c.on('close', () => {
           conns = conns.filter(x => x !== c);
-          if (!conns.length) show(`Teléfono desconectado. El código sigue abierto.<br>${howTo}`);
+          if (!conns.length) show(`Se desconectaron. El código sigue abierto.<br>${howTo}`);
+          else show(estado(), 'ok');
         });
       });
       peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });

@@ -131,7 +131,26 @@ body {
 .lbl { font-size: 12px; font-weight: 600; }
 .lbl.sin { fill: var(--honey); }
 .lbl.real { fill: var(--ink-2); }
-.hit { fill: transparent; cursor: pointer; }
+.hit { fill: transparent; cursor: pointer; touch-action: none; }
+
+/* deslizador del tiempo: alineado con el eje de la curva, grande para el dedo en la tablet */
+.scrub { padding: 6px 0 4px; }
+#scrub {
+  -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 44px; margin: 0;
+  background: transparent; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+#scrub:focus-visible { outline: 2px solid var(--honey); outline-offset: 4px; border-radius: 8px; }
+#scrub::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: var(--line); }
+#scrub::-moz-range-track { height: 8px; border-radius: 999px; background: var(--line); }
+#scrub::-moz-range-progress { height: 8px; border-radius: 999px; background: var(--honey-2); }
+#scrub::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 36px; height: 36px; margin-top: -14px;
+  clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); background: var(--honey);
+}
+#scrub::-moz-range-thumb {
+  width: 36px; height: 36px; border: 0; border-radius: 0;
+  clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); background: var(--honey);
+}
 
 .foot { color: var(--ink-3); font-size: 11.5px; line-height: 1.5; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 8px; }
 

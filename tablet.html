@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Panal en la tablet</title>
+  <meta name="description" content="Control táctil de La colmena que se apaga: el panal de 100 colmenas y un deslizador que mueve el tiempo en el computador y en el teléfono del panal.">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    html, body { height: 100%; overscroll-behavior: none; }
+    body { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+    .wrap { max-width: 1120px; margin: 0 auto; min-height: 100%; padding: 16px 24px calc(20px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; }
+    .bar { min-height: 28px; }
+    .estado { font-size: 13px; color: var(--ink-3); text-align: right; }
+    .estado.ok { color: var(--honey); }
+    .estado.error { color: #e2725b; }
+
+    /* conexión */
+    #setup { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; text-align: center; }
+    #setup h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; letter-spacing: -0.02em; }
+    #setup p { margin: 0; color: var(--ink-2); max-width: 30em; }
+    .link { display: flex; gap: 10px; }
+    .link input { width: 7em; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #0d0c0a; color: var(--ink);
+      font: 700 28px/1 inherit; letter-spacing: .2em; text-align: center; }
+    .link input:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
+
+    /* panal + control */
+    #vista { flex: 1; display: none; flex-direction: column; gap: 12px; }
+    body.conectada #setup { display: none; }
+    body.conectada #vista { display: flex; }
+    .grid { flex: 1; display: grid; grid-template-columns: minmax(240px, 1fr) 1.5fr; gap: 32px; align-items: center; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; gap: 12px; } }
+    .grid .when { margin: 6px 0 0; }
+    #panal svg { display: block; width: 100%; height: auto; }
+    .hex:hover { stroke-width: 1.5; }
+    .actions { margin-top: 20px; }
+    .btn { padding: 14px 22px; font-size: 17px; }
+    .scrub { padding: 4px 18px 0; }
+    #scrub { height: 64px; }
+    #scrub::-webkit-slider-runnable-track { height: 10px; }
+    #scrub::-moz-range-track { height: 10px; }
+    #scrub::-moz-range-progress { height: 10px; }
+    #scrub::-webkit-slider-thumb { width: 52px; height: 52px; margin-top: -21px; }
+    #scrub::-moz-range-thumb { width: 52px; height: 52px; }
+    /* el centro del pulgar (52 px) recorre de 18 + 26 px a ancho − 44 px: los años usan ese mismo tramo */
+    .years { position: relative; height: 18px; margin: -6px 44px 0; }
+    .years span { position: absolute; transform: translateX(-50%); font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="bar">
+      <span class="brand">La colmena que se apaga</span>
+      <span class="estado" id="estado" aria-live="polite"></span>
+    </header>
+
+    <main id="setup">
+      <h1>Panal en la tablet</h1>
+      <p>En el computador abre la visualización y toca 📱: aparece un código. Escríbelo aquí. Desde la tablet vas a mover el tiempo del computador y del teléfono del panal.</p>
+      <div class="link">
+        <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="código" aria-label="Código del computador">
+        <button class="btn primary" id="link">Conectar</button>
+      </div>
+    </main>
+
+    <section id="vista">
+      <div class="grid">
+        <div>
+          <div class="count" aria-live="polite">
+            <span class="num" id="num">100</span>
+            <span class="unit">colmenas vivas</span>
+          </div>
+          <p class="when" id="when"></p>
+          <div class="actions">
+            <button class="btn primary" id="btn-mode">Ver lo que realmente pasó</button>
+            <button class="btn" id="btn-play">▶ Reproducir</button>
+          </div>
+        </div>
+        <div class="comb-wrap">
+          <div id="panal" aria-label="100 colmenas representadas como celdas de un panal"></div>
+          <ul class="key">
+            <li><i class="k viva"></i>viva</li>
+            <li><i class="k muerta"></i>muerta</li>
+            <li class="rep" hidden><i class="k repuesta"></i>repuesta por apicultores</li>
+          </ul>
+        </div>
+      </div>
+      <div class="scrub">
+        <input type="range" id="scrub" min="0" max="26" step="1" value="0" aria-label="Mover el tiempo, trimestre a trimestre">
+      </div>
+      <div class="years" id="years" aria-hidden="true"></div>
+    </section>
+  </div>
+
+  <script src="js/vendor/d3.min.js"></script>
+  <script src="data/data.js"></script>
+  <script src="js/modelo.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script>
+  /* Tablet: muestra el panal y manda órdenes al computador (js/enlace.js).
+   *   tablet -> computador: { k: 'seek', t } · { k: 'mode', mode } · { k: 'play' }
+   *   computador -> tablet: { k: 'state', t, mode, playing }  (los mensajes del teléfono se ignoran)
+   * El computador reenvía al teléfono del panal, así que mover el deslizador aquí lo hace vibrar.
+   */
+  (function () {
+    const M = window.Modelo, N = M.N;
+    const $ = id => document.getElementById(id);
+    const S = { t: 0, mode: 'sin', playing: false };
+    let conn = null, dragging = false, pendingState = null;
+
+    // ---------- panal (misma geometría que js/main.js) ----------
+    const cols = 10, rowsN = 10, r = 24, w = Math.sqrt(3) * r;
+    const W = cols * w + w / 2 + 4, H = rowsN * 1.5 * r + r / 2 + 4;
+    const hex = d3.range(6).map(k => { const a = Math.PI / 180 * (60 * k - 30); return [(r - 1.5) * Math.cos(a), (r - 1.5) * Math.sin(a)]; });
+    const nodes = d3.select('#panal').append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img')
+      .selectAll('path').data(d3.range(M.CELLS)).join('path')
+      .attr('d', 'M' + hex.join('L') + 'Z')
+      .attr('transform', i => { const row = Math.floor(i / cols), col = i % cols; return `translate(${2 + w / 2 + col * w + (row % 2 ? w / 2 : 0)},${2 + r + row * 1.5 * r})`; })
+      .attr('class', 'hex viva')
+      .style('animation-delay', () => `${-Math.random() * 1.6}s`)
+      .nodes();
+
+    $('scrub').max = N;
+    // los años caen en t = 0, 4, 8, …: en % del recorrido del centro del pulgar
+    $('years').innerHTML = d3.range(2015, 2022).map(y => `<span style="left:${(y - 2015) * 4 / N * 100}%">${y}</span>`).join('');
+
+    // dibuja el estado; si el tiempo avanzó, las celdas que mueren parpadean como en el computador
+    function draw(prevT, prevMode) {
+      const v = M.alive(S.t, S.mode);
+      $('num').textContent = Math.round(v);
+      $('when').textContent = M.pointLabel(S.t) + (S.mode === 'real' ? ' · real' : ' · sin reposición');
+      nodes.forEach((n, i) => {
+        const b = M.cellState(i, S.t, S.mode);
+        if (prevMode === S.mode && prevT < S.t && b === 'muerta' && M.cellState(i, prevT, S.mode) !== 'muerta') {
+          n.setAttribute('class', 'hex muriendo');
+          setTimeout(() => n.setAttribute('class', 'hex ' + M.cellState(i, S.t, S.mode)), 160);
+        } else n.setAttribute('class', 'hex ' + b);
+      });
+      if (!dragging) $('scrub').value = S.t;
+      $('scrub').setAttribute('aria-valuetext', `${M.pointLabel(S.t)}: ${Math.round(v)} colmenas vivas`);
+      $('btn-mode').textContent = S.mode === 'real' ? 'Ver sin reposición' : 'Ver lo que realmente pasó';
+      document.querySelector('.key .rep').hidden = S.mode !== 'real';
+      $('btn-play').textContent = S.playing ? '❚❚ Pausa' : (S.t > 0 && S.t < N ? '▶ Continuar' : '▶ Reproducir');
+    }
+    function apply(st) {
+      const prevT = S.t, prevMode = S.mode;
+      Object.assign(S, { t: st.t, mode: st.mode, playing: st.playing });
+      draw(prevT, prevMode);
+    }
+
+    // ---------- órdenes ----------
+    const send = msg => { if (conn?.open) conn.send(msg); };
+    $('scrub').addEventListener('pointerdown', () => (dragging = true));
+    const release = () => { dragging = false; if (pendingState) { apply(pendingState); pendingState = null; } };
+    addEventListener('pointerup', release);
+    addEventListener('pointercancel', release);
+    $('scrub').addEventListener('input', ev => {
+      const t = +ev.target.value;
+      if (t === S.t) return;
+      // se dibuja de inmediato (sin esperar la vuelta del computador) para que el dedo no sienta retraso
+      apply({ t, mode: S.mode, playing: false });
+      send({ k: 'seek', t });
+    });
+    $('btn-mode').addEventListener('click', () => send({ k: 'mode', mode: S.mode === 'real' ? 'sin' : 'real' }));
+    $('btn-play').addEventListener('click', () => send({ k: 'play' }));
+
+    function onData(msg) {
+      if (msg?.k !== 'state') return;
+      // mientras el dedo arrastra, el deslizador manda; el estado del computador se aplica al soltar
+      if (dragging) { pendingState = msg; return; }
+      apply(msg);
+    }
+
+    // ---------- conexión (como "seguir al computador" en vibra.html) ----------
+    const say = (txt, cls = '') => { $('estado').textContent = txt; $('estado').className = 'estado ' + cls; };
+    let lock = null;
+    const keepAwake = async () => { try { lock = await navigator.wakeLock?.request('screen'); } catch (e) { lock = null; } };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && document.body.classList.contains('conectada')) keepAwake(); });
+
+    let started = false;
+    function connect() {
+      const code = $('code').value.trim();
+      if (!/^\d{4}$/.test(code)) { $('code').focus(); return; }
+      if (started) return;
+      started = true;
+      if (!window.Peer) { say('No se pudo cargar PeerJS (¿sin internet?)', 'error'); started = false; return; }
+      try { localStorage.setItem('colmena-panal-codigo', code); } catch (e) {}
+      document.body.classList.add('conectada');
+      keepAwake();
+      draw(S.t, S.mode);
+      let peer = null, retry = null, watch = null;
+      const again = (txt, ms = 2000) => { say(txt, 'error'); clearTimeout(retry); retry = setTimeout(dial, ms); };
+      function newPeer() {
+        try { peer?.destroy(); } catch (e) {}
+        peer = new Peer();
+        say('Buscando el servidor de enlace…');
+        clearTimeout(watch);
+        watch = setTimeout(() => { if (!peer.open) { say('No llega al servidor de enlace. ¿Internet? Reintentando…', 'error'); setTimeout(newPeer, 1500); } }, 10000);
+        peer.on('open', dial);
+        peer.on('disconnected', () => { if (!peer.destroyed) again('Sin conexión al servidor · reconectando…'); });
+        peer.on('error', e => {
+          if (e.type === 'peer-unavailable') again(`No hay computador abierto con el código ${code}. Reintentando…`);
+          else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error') again(`Error de red (${e.type}). Reintentando…`, 4000);
+          else say(`No se pudo enlazar (${e.type}).`, 'error');
+        });
+      }
+      function dial() {
+        if (peer.disconnected) { peer.reconnect(); return; }
+        say(`Conectando con el computador ${code}…`);
+        try { conn?.close(); } catch (e) {}
+        const c = conn = peer.connect('colmena-panal-' + code, { reliable: true, metadata: { rol: 'tablet' } });
+        clearTimeout(watch);
+        watch = setTimeout(() => {
+          if (c !== conn || c.open) return;
+          again('El computador está, pero la red bloquea la conexión directa. Pongan ambos en el mismo wifi o en el hotspot del teléfono. Reintentando…', 3000);
+        }, 12000);
+        c.on('open', () => { clearTimeout(retry); clearTimeout(watch); say(`Conectada al computador ${code}`, 'ok'); c.send({ k: 'estado' }); });
+        c.on('data', onData);
+        c.on('close', () => { if (c === conn) again('El computador se desconectó · reconectando…'); });
+      }
+      newPeer();
+    }
+
+    try { $('code').value = localStorage.getItem('colmena-panal-codigo') || ''; } catch (e) {}
+    $('link').addEventListener('click', connect);
+    $('code').addEventListener('keydown', ev => { if (ev.key === 'Enter') connect(); });
+  })();
+  </script>
+</body>
+</html>
