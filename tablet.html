@@ -188,6 +188,8 @@
     // Recibe lo mismo que el teléfono del panal: alive, death y birth. Arranca en silencio hasta
     // el primer "alive" del computador. 🔊/🔇 arriba a la derecha lo prende y apaga sin reconectar.
     const Z = window.Zumbido;
+    // el parlante de la tablet satura con el enjambre completo: menos abejas y más bajo que en el computador
+    Z.ajustar({ volumen: 0.4, voces: 10 });
     let level = 0;
     function syncSound() {
       $('btn-sound').textContent = Z.on ? '🔊' : '🔇';
