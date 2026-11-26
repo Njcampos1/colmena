@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Panal en la tablet</title>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="description" content="Control táctil de La colmena que se apaga: el panal de 100 colmenas y un deslizador que mueve el tiempo en el computador y en el teléfono del panal.">
   <link rel="stylesheet" href="css/style.css">
   <style>
@@ -24,34 +27,44 @@
       font: 700 28px/1 inherit; letter-spacing: .2em; text-align: center; }
     .link input:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
 
-    /* panal + control */
-    #vista { flex: 1; display: none; flex-direction: column; gap: 12px; }
-    body.conectada #setup { display: none; }
-    body.conectada #vista { display: flex; }
-    .grid { flex: 1; display: grid; grid-template-columns: minmax(240px, 1fr) 1.5fr; gap: 32px; align-items: center; }
-    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; gap: 12px; } }
-    .grid .when { margin: 6px 0 0; }
-    #panal svg { display: block; width: 100%; height: auto; }
-    .hex:hover { stroke-width: 1.5; }
-    .actions { margin-top: 20px; }
-    .btn { padding: 14px 22px; font-size: 17px; }
-    .scrub { padding: 4px 18px 0; }
-    #scrub { height: 64px; }
-    #scrub::-webkit-slider-runnable-track { height: 10px; }
-    #scrub::-moz-range-track { height: 10px; }
-    #scrub::-moz-range-progress { height: 10px; }
-    #scrub::-webkit-slider-thumb { width: 52px; height: 52px; margin-top: -21px; }
-    #scrub::-moz-range-thumb { width: 52px; height: 52px; }
-    /* el centro del pulgar (52 px) recorre de 18 + 26 px a ancho − 44 px: los años usan ese mismo tramo */
-    .years { position: relative; height: 18px; margin: -6px 44px 0; }
-    .years span { position: absolute; transform: translateX(-50%); font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+    /* ---------- panal a pantalla completa: el panal manda, lo demás se aparta ---------- */
+    #vista { position: fixed; inset: 0; display: none; grid-template-rows: minmax(0, 1fr) auto; background: var(--bg);
+      padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+    body.conectada .wrap { display: none; }
+    body.conectada #vista { display: grid; }
+    #panal { min-height: 0; display: flex; align-items: center; justify-content: center; }
+    #panal svg { display: block; width: 100%; height: 100%; }
+
+    /* número y fecha: pequeños, arriba a la izquierda, sin tapar el panal */
+    .v-info { position: absolute; left: max(16px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); display: grid; gap: 2px; pointer-events: none; }
+    .v-num { font-size: clamp(30px, 5vmin, 48px); font-weight: 750; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+    .v-unit, .v-when { font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+    .v-info .key { justify-content: flex-start; flex-direction: column; gap: 3px; margin-top: 8px; font-size: 11.5px; color: var(--ink-3); }
+
+    /* estado de la conexión: arriba a la derecha, se apaga solo cuando todo está bien */
+    .v-top { position: absolute; right: max(12px, env(safe-area-inset-right)); top: max(10px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 8px; }
+    .v-top .estado { max-width: 22em; transition: opacity .6s; }
+    .v-top .estado.quieto { opacity: 0; }
+
+    /* franja de control: ▶ · deslizador · modo */
+    .v-ctrl { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding-top: 4px; }
+    .v-btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-2); background: transparent; border: 1px solid var(--line);
+      border-radius: 999px; padding: 9px 14px; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+    .v-btn:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
+    #btn-play { width: 44px; height: 44px; padding: 0; font-size: 15px; }
+    #btn-full { width: 36px; height: 36px; padding: 0; font-size: 16px; }
+    #scrub { height: 56px; }
+    #scrub::-webkit-slider-thumb { width: 44px; height: 44px; margin-top: -18px; }
+    #scrub::-moz-range-thumb { width: 44px; height: 44px; }
+    /* el centro del pulgar (44 px) recorre de 22 px a ancho − 22 px: los años usan ese mismo tramo */
+    .years { position: relative; height: 15px; margin: -10px 22px 0; }
+    .years span { position: absolute; transform: translateX(-50%); font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header class="bar">
       <span class="brand">La colmena que se apaga</span>
-      <span class="estado" id="estado" aria-live="polite"></span>
     </header>
 
     <main id="setup">
@@ -63,34 +76,33 @@
       </div>
     </main>
 
-    <section id="vista">
-      <div class="grid">
-        <div>
-          <div class="count" aria-live="polite">
-            <span class="num" id="num">100</span>
-            <span class="unit">colmenas vivas</span>
-          </div>
-          <p class="when" id="when"></p>
-          <div class="actions">
-            <button class="btn primary" id="btn-mode">Ver lo que realmente pasó</button>
-            <button class="btn" id="btn-play">▶ Reproducir</button>
-          </div>
-        </div>
-        <div class="comb-wrap">
-          <div id="panal" aria-label="100 colmenas representadas como celdas de un panal"></div>
-          <ul class="key">
-            <li><i class="k viva"></i>viva</li>
-            <li><i class="k muerta"></i>muerta</li>
-            <li class="rep" hidden><i class="k repuesta"></i>repuesta por apicultores</li>
-          </ul>
-        </div>
-      </div>
-      <div class="scrub">
-        <input type="range" id="scrub" min="0" max="26" step="1" value="0" aria-label="Mover el tiempo, trimestre a trimestre">
-      </div>
-      <div class="years" id="years" aria-hidden="true"></div>
-    </section>
   </div>
+
+  <section id="vista">
+    <div id="panal" aria-label="100 colmenas representadas como celdas de un panal"></div>
+    <div class="v-ctrl">
+      <button class="v-btn" id="btn-play" aria-label="Reproducir">▶</button>
+      <div>
+        <input type="range" id="scrub" min="0" max="26" step="1" value="0" aria-label="Mover el tiempo, trimestre a trimestre">
+        <div class="years" id="years" aria-hidden="true"></div>
+      </div>
+      <button class="v-btn" id="btn-mode">Ver lo que realmente pasó</button>
+    </div>
+    <div class="v-info" aria-live="polite">
+      <div class="v-num" id="num">100</div>
+      <div class="v-unit">colmenas vivas</div>
+      <div class="v-when" id="when"></div>
+      <ul class="key">
+        <li><i class="k viva"></i>viva</li>
+        <li><i class="k muerta"></i>muerta</li>
+        <li class="rep" hidden><i class="k repuesta"></i>repuesta</li>
+      </ul>
+    </div>
+    <div class="v-top">
+      <span class="estado" id="estado" aria-live="polite"></span>
+      <button class="v-btn" id="btn-full" aria-label="Pantalla completa" hidden>⛶</button>
+    </div>
+  </section>
 
   <script src="js/vendor/d3.min.js"></script>
   <script src="data/data.js"></script>
@@ -138,9 +150,10 @@
       });
       if (!dragging) $('scrub').value = S.t;
       $('scrub').setAttribute('aria-valuetext', `${M.pointLabel(S.t)}: ${Math.round(v)} colmenas vivas`);
-      $('btn-mode').textContent = S.mode === 'real' ? 'Ver sin reposición' : 'Ver lo que realmente pasó';
+      $('btn-mode').textContent = S.mode === 'real' ? 'Ver sin reposición' : 'Ver lo que pasó';
       document.querySelector('.key .rep').hidden = S.mode !== 'real';
-      $('btn-play').textContent = S.playing ? '❚❚ Pausa' : (S.t > 0 && S.t < N ? '▶ Continuar' : '▶ Reproducir');
+      $('btn-play').textContent = S.playing ? '❚❚' : '▶';
+      $('btn-play').setAttribute('aria-label', S.playing ? 'Pausa' : (S.t > 0 && S.t < N ? 'Continuar' : 'Reproducir'));
     }
     function apply(st) {
       const prevT = S.t, prevMode = S.mode;
@@ -172,10 +185,31 @@
     }
 
     // ---------- conexión (como "seguir al computador" en vibra.html) ----------
-    const say = (txt, cls = '') => { $('estado').textContent = txt; $('estado').className = 'estado ' + cls; };
+    // cuando todo está bien el aviso se apaga solo; los errores se quedan a la vista
+    const say = (txt, cls = '') => {
+      $('estado').textContent = txt; $('estado').className = 'estado ' + cls;
+      clearTimeout(say.tm);
+      if (cls === 'ok') say.tm = setTimeout(() => $('estado').classList.add('quieto'), 3000);
+    };
     let lock = null;
     const keepAwake = async () => { try { lock = await navigator.wakeLock?.request('screen'); } catch (e) { lock = null; } };
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && document.body.classList.contains('conectada')) keepAwake(); });
+
+    // pantalla completa: se pide dentro del toque en "Conectar" (el navegador lo exige).
+    // Si se sale (gesto del sistema), aparece ⛶ arriba a la derecha para volver.
+    const root = document.documentElement;
+    const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const canFull = !!(root.requestFullscreen || root.webkitRequestFullscreen);
+    function goFull() {
+      try {
+        const p = root.requestFullscreen ? root.requestFullscreen({ navigationUI: 'hide' }) : root.webkitRequestFullscreen?.();
+        p?.catch?.(() => {});
+      } catch (e) {}
+    }
+    const syncFull = () => { $('btn-full').hidden = !canFull || isFull() || !document.body.classList.contains('conectada'); };
+    document.addEventListener('fullscreenchange', syncFull);
+    document.addEventListener('webkitfullscreenchange', syncFull);
+    $('btn-full').addEventListener('click', goFull);
 
     let started = false;
     function connect() {
@@ -185,7 +219,9 @@
       started = true;
       if (!window.Peer) { say('No se pudo cargar PeerJS (¿sin internet?)', 'error'); started = false; return; }
       try { localStorage.setItem('colmena-panal-codigo', code); } catch (e) {}
+      goFull();
       document.body.classList.add('conectada');
+      syncFull();
       keepAwake();
       draw(S.t, S.mode);
       let peer = null, retry = null, watch = null;
