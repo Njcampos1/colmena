@@ -26,6 +26,8 @@
     .link input { width: 7em; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #0d0c0a; color: var(--ink);
       font: 700 28px/1 inherit; letter-spacing: .2em; text-align: center; }
     .link input:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
+    .check { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--ink-2); cursor: pointer; }
+    .check input { width: 20px; height: 20px; accent-color: var(--honey); }
 
     /* ---------- panal a pantalla completa: el panal manda, lo demás se aparta ---------- */
     #vista { position: fixed; inset: 0; display: none; grid-template-rows: minmax(0, 1fr) auto; background: var(--bg);
@@ -52,7 +54,8 @@
       border-radius: 999px; padding: 9px 14px; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
     .v-btn:focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; }
     #btn-play { width: 44px; height: 44px; padding: 0; font-size: 15px; }
-    #btn-full { width: 36px; height: 36px; padding: 0; font-size: 16px; }
+    #btn-full, #btn-sound { width: 36px; height: 36px; padding: 0; font-size: 16px; }
+    #btn-sound[aria-pressed="false"] { opacity: .55; }
     #scrub { height: 56px; }
     #scrub::-webkit-slider-thumb { width: 44px; height: 44px; margin-top: -18px; }
     #scrub::-moz-range-thumb { width: 44px; height: 44px; }
@@ -74,6 +77,8 @@
         <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="código" aria-label="Código del computador">
         <button class="btn primary" id="link">Conectar</button>
       </div>
+      <label class="check"><input type="checkbox" id="opt-sound"> Zumbido también por el parlante de la tablet</label>
+      <p style="font-size:13px;color:var(--ink-3)">Si el computador también suena, se oye como eco: deja solo uno con sonido.</p>
     </main>
 
   </div>
@@ -100,6 +105,7 @@
     </div>
     <div class="v-top">
       <span class="estado" id="estado" aria-live="polite"></span>
+      <button class="v-btn" id="btn-sound" aria-label="Zumbido de la tablet" aria-pressed="false">🔇</button>
       <button class="v-btn" id="btn-full" aria-label="Pantalla completa" hidden>⛶</button>
     </div>
   </section>
@@ -107,6 +113,7 @@
   <script src="js/vendor/d3.min.js"></script>
   <script src="data/data.js"></script>
   <script src="js/modelo.js"></script>
+  <script src="js/zumbido.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script>
   /* Tablet: muestra el panal y manda órdenes al computador (js/enlace.js).
@@ -177,7 +184,31 @@
     $('btn-mode').addEventListener('click', () => send({ k: 'mode', mode: S.mode === 'real' ? 'sin' : 'real' }));
     $('btn-play').addEventListener('click', () => send({ k: 'play' }));
 
+    // ---------- zumbido propio (opcional) ----------
+    // Recibe lo mismo que el teléfono del panal: alive, death y birth. Arranca en silencio hasta
+    // el primer "alive" del computador. 🔊/🔇 arriba a la derecha lo prende y apaga sin reconectar.
+    const Z = window.Zumbido;
+    let level = 0;
+    function syncSound() {
+      $('btn-sound').textContent = Z.on ? '🔊' : '🔇';
+      $('btn-sound').setAttribute('aria-pressed', String(Z.on));
+    }
+    async function soundOn() {
+      Z.setAlive(level, 0.1);
+      try { await Z.enable(); } catch (e) { say('Este navegador no deja reproducir el zumbido.', 'error'); }
+      syncSound();
+    }
+    function soundOff() { Z.disable(); syncSound(); }
+    $('btn-sound').addEventListener('click', () => {
+      const on = !Z.on;
+      on ? soundOn() : soundOff();
+      $('opt-sound').checked = on;
+      try { localStorage.setItem('colmena-tablet-sonido', on ? '1' : '0'); } catch (e) {}
+    });
+
     function onData(msg) {
+      if (msg?.k === 'alive') { level = msg.v; Z.setAlive(msg.v, 0.6); return; }
+      if (msg?.k === 'death' || msg?.k === 'birth') { Z[msg.k](msg.at || 0); return; }
       if (msg?.k !== 'state') return;
       // mientras el dedo arrastra, el deslizador manda; el estado del computador se aplica al soltar
       if (dragging) { pendingState = msg; return; }
@@ -219,6 +250,9 @@
       started = true;
       if (!window.Peer) { say('No se pudo cargar PeerJS (¿sin internet?)', 'error'); started = false; return; }
       try { localStorage.setItem('colmena-panal-codigo', code); } catch (e) {}
+      try { localStorage.setItem('colmena-tablet-sonido', $('opt-sound').checked ? '1' : '0'); } catch (e) {}
+      // el audio se tiene que crear dentro del toque en "Conectar", antes de cualquier espera
+      if ($('opt-sound').checked) soundOn();
       goFull();
       document.body.classList.add('conectada');
       syncFull();
@@ -258,6 +292,7 @@
     }
 
     try { $('code').value = localStorage.getItem('colmena-panal-codigo') || ''; } catch (e) {}
+    try { $('opt-sound').checked = localStorage.getItem('colmena-tablet-sonido') === '1'; } catch (e) {}
     $('link').addEventListener('click', connect);
     $('code').addEventListener('keydown', ev => { if (ev.key === 'Enter') connect(); });
   })();
