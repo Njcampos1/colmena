@@ -11,9 +11,10 @@
  * El volumen maestro es fijo.
  */
 (function () {
-  const MAX_VOICES = 16;
+  let MAX_VOICES = 16;
+  let volume = 0.7;   // volumen maestro (la tablet lo baja: su parlante satura antes)
   const rand = (a, b) => a + Math.random() * (b - a);
-  let ctx, bus, sample = null, voices = [], wander = null, on = false, target = 0;
+  let ctx, bus, master, sample = null, voices = [], wander = null, on = false, target = 0;
 
   async function loadSample() {
     const url = document.body.dataset.sample;   // p.ej. <body data-sample="audio/abeja.mp3">
@@ -128,13 +129,22 @@
 
   const Zumbido = {
     get on() { return on; },
+    /** ajustes por dispositivo: { volumen: 0–1, voces: máximo de abejas a la vez }.
+     *  Las voces se fijan antes de enable(); el volumen se puede cambiar en cualquier momento. */
+    ajustar({ volumen, voces } = {}) {
+      if (volumen != null) { volume = volumen; if (master) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.1); }
+      if (voces != null && !ctx) MAX_VOICES = voces;
+    },
     async enable() {
       if (!ctx) {
         ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const master = ctx.createGain(); master.gain.value = 0.7;
+        master = ctx.createGain(); master.gain.value = volume;
         const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 4;
+        // limitador al final: con muchas abejas a la vez la suma no pasa de 0 dB y no se rompe
+        const lim = ctx.createDynamicsCompressor();
+        lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
         bus = ctx.createGain(); bus.gain.value = 1;
-        bus.connect(master).connect(comp).connect(ctx.destination);
+        bus.connect(master).connect(comp).connect(lim).connect(ctx.destination);
         await loadSample();
         for (let i = 0; i < MAX_VOICES; i++) voices.push(makeVoice(i));
       }

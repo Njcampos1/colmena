@@ -154,6 +154,8 @@
     // zumbido propio de la tablet al seguir al computador. Se guardan las funciones originales porque
     // enlace.js (modo "la tablet dirige") las envuelve y reenviaría este sonido al teléfono.
     const Z = window.Zumbido;
+    // el parlante de la tablet satura con el enjambre completo: menos abejas y más bajo que en el computador
+    Z.ajustar({ volumen: 0.4, voces: 10 });
     const zLocal = { setAlive: Z.setAlive.bind(Z), death: Z.death.bind(Z), birth: Z.birth.bind(Z) };
     const MES = ['ene', 'abr', 'jul', 'oct'];
     const pointLabel = t => t < N ? `${MES[D.periods[t].q - 1]} ${D.periods[t].year}` : 'jul 2021';
